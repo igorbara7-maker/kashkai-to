@@ -1,0 +1,275 @@
+'use strict';
+// Обмін між пристроями (телефон ↔ комп). Копія — архів ZIP: дані (kashkai.json) і фото (foto/…).
+//
+// «Лише зміни»: кожна копія несе відомості, що вже є на пристрої-відправнику
+// (have: пристрій → час його найновішої зміни, яку відправник має). Прийнявши копію від «Комп»,
+// телефон знає, що там уже є, і далі шле лише новіше. Якщо файл зі змінами загубився — не страшно:
+// доки звідти не прийде нова копія, кожні наступні «зміни» містять і все попереднє.
+// Копія «лише змін» пам'ятає, від чого її рахували (base). Якщо на приймачі чогось із того бракує
+// (дані стерли, файл призначався іншому пристрою), програма попередить і попросить повну копію.
+const Obmin = (() => {
+  const FORMAT = 2;
+  const DATA = 'kashkai.json';
+  const e = U.esc;
+  let ready = null;   // підготовлений файл { file, sum }
+  let busy = false;
+
+  const defaultName = () => /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? 'Телефон' : 'Комп';
+  const myName = () => DB.getMeta('deviceName') || defaultName();
+  const know = () => DB.getMeta('know') || {};
+  const peers = () => DB.getMeta('peers') || {};
+  const $ = id => document.getElementById(id);
+
+  function peerList() {
+    const ps = peers();
+    return Object.keys(ps).filter(id => id !== DB.device)
+      .map(id => Object.assign({ id }, ps[id])).sort((a, b) => (b.got || 0) - (a.got || 0));
+  }
+
+  const pad = n => String(n).padStart(2, '0');
+  function when(ms) {
+    if (!ms) return '—';
+    const d = new Date(ms);
+    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function size(b) {
+    if (b < 1048576) return Math.max(1, Math.round(b / 1024)) + ' КБ';
+    return (b / 1048576).toFixed(1).replace('.', ',') + ' МБ';
+  }
+  const ext = mime => ({ 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' }[mime] || '.bin');
+
+  // Що піде в копію: усе (peerId порожній) або лише те, чого на пристрої peerId ще немає.
+  function select(peerId) {
+    const base = peerId ? Object.assign({}, (peers()[peerId] || {}).have) : null;
+    const pick = x => !base || base[x.dev] == null || x.u > base[x.dev];
+    const records = DB.allRecords().filter(pick);
+    const files = DB.allFiles().filter(pick);
+    const photos = files.filter(f => !f.del);
+    return { base, records, files, photos, bytes: photos.reduce((s, f) => s + (f.size || 0), 0) };
+  }
+
+  // ---------- підготовка копії ----------
+  async function build(peerId, onStep) {
+    const now = DB.clock();
+    const sel = select(peerId);
+    const have = Object.assign({}, know());
+    have[DB.device] = now;
+    const entries = [], files = [];
+    for (const f of sel.files) {
+      const { size: _s, ...m } = f;
+      if (!f.del) {
+        const rec = await DB.getFile(f.id);
+        if (!rec || !(rec.blob instanceof Blob)) continue;   // фото зникло — не обіцяємо його
+        m.path = 'foto/' + f.id + ext(f.mime);
+        entries.push({ name: m.path, data: rec.blob });
+      }
+      files.push(m);
+    }
+    const data = {
+      app: 'kashkai-to', format: FORMAT, created: new Date(now).toISOString(),
+      device: DB.device, deviceName: myName(), have, base: sel.base, for: peerId || null,
+      records: sel.records, files,
+    };
+    entries.unshift({ name: DATA, data: JSON.stringify(data) });
+    const zip = await Zip.write(entries, onStep);
+    await DB.setMeta('clock', now);
+    const d = new Date(now);
+    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+    const who = myName().replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 30);
+    const name = `кашкай_${peerId ? 'зміни' : 'копія'}_${who}_${stamp}.zip`;
+    return {
+      file: new File([zip], name, { type: 'application/zip' }),
+      sum: { records: sel.records.length, photos: entries.length - 1, peer: peerId ? (peers()[peerId] || {}).name : null },
+    };
+  }
+
+  function canShare(file) {
+    try { return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [file] })); }
+    catch (x) { return false; }
+  }
+
+  async function make() {
+    if (busy) return;
+    const out = $('obminOut');
+    const pick = document.querySelector('input[name="obminWhat"]:checked');
+    const peerId = pick ? pick.value : '';
+    busy = true;
+    ready = null;
+    out.innerHTML = '<p class="muted">Готую файл…</p>';
+    try {
+      ready = await build(peerId, (i, n) => { if (n > 3) out.innerHTML = `<p class="muted">Готую файл… ${i} з ${n}</p>`; });
+      const f = ready.file, s = ready.sum, share = canShare(f);
+      const phone = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+      const hint = share
+        ? '«Надіслати» → виберіть <b>LocalSend</b> → пристрій, на який надсилаєте.'
+        : phone
+          ? 'Натисніть «Зберегти у файл». Потім у <b>LocalSend</b>: «Надіслати» → «Файл» → папка «Завантаження» (Download) → цей файл.'
+          : 'Файл ляже в папку «Завантаження». Перетягніть його у вікно <b>LocalSend</b> і виберіть пристрій.';
+      out.innerHTML = `<div class="ready">
+          <p><b>Файл готовий</b><br><span class="small">${e(f.name)}</span><br>
+          <span class="sub">${size(f.size)} · записів ${s.records}, фото ${s.photos}</span></p>
+          <p class="actions">${share ? '<button class="btn" data-act="obmin-share">Надіслати</button>' : ''}
+            <button class="btn${share ? ' ghost' : ''}" data-act="obmin-save">Зберегти у файл</button></p>
+          <p class="muted small">${hint}</p></div>`;
+    } catch (err) {
+      console.error(err);
+      out.innerHTML = `<p class="err">Не вдалося підготувати файл: ${e(err.message)}</p>`;
+    } finally { busy = false; }
+  }
+
+  async function share() {
+    if (!ready) return;
+    try { await navigator.share({ files: [ready.file], title: ready.file.name }); }
+    catch (err) {
+      if (err && err.name === 'AbortError') return;   // власник передумав
+      U.toast('Надіслати не вдалося — збережіть у файл', 5000);
+    }
+  }
+  function save() {
+    if (!ready) return;
+    U.download(ready.file.name, ready.file);
+    U.toast('Файл збережено в «Завантаження»', 4000);
+  }
+
+  async function rename() {
+    const v = prompt('Назва цього пристрою (її побачить інший пристрій під час обміну):', myName());
+    if (v == null) return;
+    const name = v.trim().slice(0, 40);
+    if (!name) return;
+    await DB.setMeta('deviceName', name);
+    App.refresh();
+  }
+
+  // ---------- прийом копії ----------
+  function b64ToBlob(b64, mime) {
+    const bin = atob(b64), a = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    return new Blob([a], { type: mime || 'image/jpeg' });
+  }
+
+  async function readCopy(file, onStep) {
+    let data, zip = null;
+    if (await Zip.isZip(file)) {
+      zip = await Zip.open(file);
+      if (!zip.has(DATA)) throw new Error('Це архів, але не копія програми «Кашкай ТО».');
+      try { data = JSON.parse(await zip.text(DATA)); } catch (x) { throw new Error(x.message.startsWith('Пошкоджений') ? x.message : 'Копія пошкоджена.'); }
+    } else {
+      try { data = JSON.parse(await file.text()); } catch (x) { throw new Error('Це не файл копії програми «Кашкай ТО».'); }
+    }
+    if (!data || data.app !== 'kashkai-to' || !Array.isArray(data.records)) throw new Error('Це не файл копії програми «Кашкай ТО».');
+    if (data.format > FORMAT) throw new Error('Копію зроблено новішою версією програми — спершу оновіть програму на цьому пристрої (Ще → Налаштування).');
+
+    const list = Array.isArray(data.files) ? data.files : [];
+    const files = [];
+    let bad = 0, i = 0;
+    for (const f of list) {
+      if (onStep) onStep(++i, list.length);
+      if (!f || typeof f.id !== 'string' || typeof f.u !== 'number') continue;
+      if (f.del) { files.push(f); continue; }
+      if (!DB.wantsFile(f)) continue;
+      try {
+        let blob;
+        if (zip && f.path) blob = await zip.blob(f.path, f.mime || 'image/jpeg');
+        else if (f.data) blob = b64ToBlob(f.data, f.mime);
+        else throw new Error('фото немає в копії');
+        const { path: _p, data: _d, size: _s, ...m } = f;
+        files.push(Object.assign(m, { blob }));
+      } catch (x) { console.warn('Фото не взято', f.id, x); bad++; }
+    }
+    const res = await DB.merge(data.records, files);
+    res.bad = bad;
+    res.from = data.deviceName || '';
+    res.book = !!data.import;
+    res.created = Date.parse(data.created) || 0;
+
+    // Що тепер відомо: про себе (know) і про пристрій-відправник (peers).
+    const self = DB.device;
+    if (data.have && typeof data.have === 'object') {
+      const k = Object.assign({}, know());
+      const base = data.base && typeof data.base === 'object' ? data.base : null;
+      const fits = !base || Object.keys(base).every(x => x === self || (k[x] || 0) >= base[x]);
+      if (fits && !bad) {
+        for (const [x, t] of Object.entries(data.have)) if (x !== self && typeof t === 'number' && !(k[x] >= t)) k[x] = t;
+        await DB.setMeta('know', k);
+      } else if (!fits) res.partial = true;
+      if (data.device && data.device !== self && !data.import) {
+        const ps = Object.assign({}, peers());
+        const old = ps[data.device] || {};
+        const h = Object.assign({}, old.have);
+        for (const [x, t] of Object.entries(data.have)) if (typeof t === 'number' && !(h[x] >= t)) h[x] = t;
+        ps[data.device] = {
+          name: data.deviceName || old.name || 'Інший пристрій', have: h,
+          at: Math.max(old.at || 0, res.created), got: Date.now(),
+        };
+        await DB.setMeta('peers', ps);
+      }
+    }
+    if (data.device === self) res.own = true;
+    return res;
+  }
+
+  async function importFile(file) {
+    if (!file || busy) return;
+    busy = true;
+    let msg;
+    const out0 = $('importRes');
+    if (out0) out0.innerHTML = '<p class="muted">Читаю файл…</p>';
+    try {
+      const r = await readCopy(file, (i, n) => { const o = $('importRes'); if (o && n > 3) o.innerHTML = `<p class="muted">Читаю фото… ${i} з ${n}</p>`; });
+      const parts = [`нових записів: ${r.added}`, `оновлено: ${r.updated}`];
+      if (r.deleted) parts.push(`видалено: ${r.deleted}`);
+      if (r.photos) parts.push(`фото: ${r.photos}`);
+      if (r.photosDel) parts.push(`видалено фото: ${r.photosDel}`);
+      if (r.kept) parts.push(`у вас новіші, лишено ваші: ${r.kept}`);
+      parts.push(`без змін: ${r.same}`);
+      const src = r.own ? 'Це копія з цього ж пристрою. '
+        : r.book ? `Файл імпорту з книги Excel${r.created ? ' від ' + when(r.created) : ''}. `
+        : r.from ? `Копія з «${e(r.from)}»${r.created ? ' від ' + when(r.created) : ''}. ` : '';
+      msg = `<p class="ok">Готово.</p><p>${src}${parts.join(', ')}.</p>`;
+      if (r.bad) msg += `<p class="err">Пошкоджених фото: ${r.bad} — їх не взято. Надішліть копію ще раз.</p>`;
+      if (r.partial) msg += `<p class="err">Увага: це лише зміни, а частини попередніх змін на цьому пристрої немає. Надішліть сюди з «${e(r.from || 'іншого пристрою')}» повну копію.</p>`;
+    } catch (err) {
+      console.error(err);
+      msg = `<p class="err">${e(err.message)}</p>`;
+    } finally { busy = false; }
+    App.refresh();
+    const out = $('importRes');
+    if (out) out.innerHTML = msg;
+  }
+
+  // ---------- екран ----------
+  function screen() {
+    const all = select(null);
+    const ps = peerList();
+    const opt = (val, title, sub, on) => `<label class="check choice"><input type="radio" name="obminWhat" value="${e(val)}"${on ? ' checked' : ''}>
+      <span><b>${title}</b><span class="sub">${sub}</span></span></label>`;
+    let opts = ps.map((pr, i) => {
+      const s = select(pr.id);
+      const what = s.records.length || s.files.length
+        ? `змін: ${s.records.length}, фото: ${s.photos.length}${s.bytes ? ', ≈ ' + size(s.bytes) : ''}`
+        : 'нових змін немає';
+      return opt(pr.id, `Лише зміни для «${e(pr.name)}»`, `${what} · рахую від його копії ${when(pr.at)}`, i === 0);
+    }).join('');
+    const nRec = all.records.filter(r => !r.del).length;
+    opts += opt('', 'Повна копія', `записів ${nRec}, фото ${all.photos.length}${all.bytes ? ', ≈ ' + size(all.bytes) : ''}`, !ps.length);
+    return {
+      title: 'Обмін даними', back: true, html: `
+      <section class="panel">
+        <h3>Надіслати на інший пристрій</h3>
+        <p class="muted small">Цей пристрій: <b>${e(myName())}</b> · <button type="button" class="linkbtn" data-act="dev-rename">змінити назву</button></p>
+        <div class="choices">${opts}</div>
+        ${ps.length ? '' : '<p class="muted small">Перший раз надішліть повну копію. Коли інший пристрій надішле свою копію сюди, з\'явиться «лише зміни» — це менший файл.</p>'}
+        <p class="actions"><button class="btn" data-act="obmin-make">Підготувати файл</button></p>
+        <div id="obminOut"></div>
+      </section>
+      <section class="panel">
+        <h3>Прийняти копію</h3>
+        <p>Файл з іншого пристрою (LocalSend кладе отримане зазвичай у «Завантаження») або файл імпорту з книги Excel. Нічого не затирається: з двох версій одного запису лишається новіша, видалене на іншому пристрої видаляється й тут.</p>
+        <label class="btn">Вибрати файл<input type="file" accept=".zip,.json,application/zip,application/x-zip-compressed,application/json,application/octet-stream" data-act="import" hidden></label>
+        <div id="importRes"></div>
+      </section>`,
+    };
+  }
+
+  return { screen, make, share, save, rename, importFile, readCopy, build, select };
+})();

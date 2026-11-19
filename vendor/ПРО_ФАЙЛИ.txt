@@ -1,0 +1,17 @@
+Сторонні файли для розпізнавання тексту на фото (працюють без інтернету).
+
+ort/  — ONNX Runtime Web 1.30.0 (Microsoft), ліцензія MIT.
+        Взято з пакета npm «onnxruntime-web@1.30.0»: ort.wasm.bundle.min.mjs,
+        ort-wasm-simd-threaded.wasm, ort-wasm-simd-threaded.mjs.
+
+ocr/  — моделі PaddleOCR PP-OCRv5 (Baidu PaddlePaddle), ліцензія Apache-2.0,
+        у форматі ONNX з проєкту RapidOCR (v3.10.0):
+          det.onnx  = ch_PP-OCRv5_det_mobile.onnx
+                      SHA256 4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae
+          rec.onnx  = cyrillic_PP-OCRv5_rec_mobile.onnx
+                      SHA256 90f761b4bfcce0c8c561c0cb5c887b0971d3ec01c32164bdf7374a35b0982711
+          dict.txt  = список літер моделі cyrillic_PP-OCRv5_mobile_rec (850 знаків,
+                      звірено з моделлю PaddleOCR на компі — збігається повністю).
+        Це ті самі моделі, що й у розпізнаванні на компі (PaddleOCR).
+
+Якщо міняєте будь-який файл тут — збільште OCR_CACHE у sw.js (kashkai-ocr-1 → kashkai-ocr-2).
