@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.19.0';
+  const VERSION = '0.20.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -16,7 +16,7 @@ const App = (() => {
 
   // Яка вкладка внизу світиться на якому екрані. Шестерня (#/sche, обмін, Excel, налаштування) — частина Головної.
   const TAB_OF = { '': 'stan', stan: 'stan', rule: 'stan', sche: 'stan', obmin: 'stan', excel: 'stan', perevirka: 'stan', nalashtuvannia: 'stan',
-    zhurnal: 'hist', docs: 'hist', doc: 'hist', foto: 'hist', share: 'hist', probih: 'hist', notes: 'hist',
+    zhurnal: 'hist', docs: 'hist', doc: 'hist', foto: 'hist', kamera: 'hist', share: 'hist', probih: 'hist', notes: 'hist',
     vytraty: 'vytraty', palne: 'vytraty', dribni: 'vytraty', poizdky: 'vytraty', poizdka: 'vytraty',
     avto: 'avto', zapchasty: 'avto', shyny: 'avto', reglament: 'avto', maistru: 'avto' };
   const TAB_OF_EDIT = { work: 'hist', visit: 'hist', doc: 'hist', odo: 'hist', note: 'hist', fuel: 'vytraty', expense: 'vytraty', trip: 'vytraty', tireevent: 'avto', rule: 'avto' };
@@ -50,6 +50,7 @@ const App = (() => {
         case 'excel': r = Excel.screen(); break;
         case 'nalashtuvannia': r = V.nalashtuvannia(); break;
         case 'foto': r = fotoScreen(); break;
+        case 'kamera': r = Kamera.screen(); break;
         case 'share': r = shareScreen(); break;
         case 'edit': r = F.render(b, c, q); break;
         default: r = V.notFound();
@@ -104,9 +105,9 @@ const App = (() => {
     const tile = (h, t) => `<a href="${h}">${t}</a>`;
     openSheet(`<h3>Додати</h3>
       ${tr ? `<a class="item" href="#/poizdka/${U.esc(tr.id)}"><b>Поїздка «${U.esc(tr.name)}»</b><div class="sub">Підсумок, завершити поїздку</div></a>` : ''}
-      <label class="add-big">Сфотографувати<div class="sub">чек, акт чи накладну — програма прочитає, ви перевірите</div>
-        <input type="file" accept="image/*" capture="environment" data-ocr hidden></label>
-      <label class="btn ghost wide">Вибрати з галереї<input type="file" accept="image/*" multiple data-ocr hidden></label>
+      <label class="add-big">Сфотографувати<div class="sub">чек АЗС, приладку, акт чи накладну — програма сама впізнає, ви перевірите</div>
+        <input type="file" accept="image/*" capture="environment" data-cam hidden></label>
+      <label class="btn ghost wide">Вибрати з галереї<input type="file" accept="image/*" multiple data-cam hidden></label>
       <div class="add-grid">
         ${tile('#/edit/fuel/new', 'Заправка')}${tile('#/edit/odo/new', 'Пробіг')}${tile('#/edit/visit/new', 'ТО')}
         ${tile('#/edit/expense/new', 'Витрата')}${tile('#/edit/tireevent/new', 'Шини')}${tr ? tile('#/poizdka/' + U.esc(tr.id), 'Поїздка') : tile('#/edit/trip/new', 'Поїздка')}
@@ -362,6 +363,13 @@ const App = (() => {
     if (t.matches('[data-act="import"]')) { const f = t.files[0]; t.value = ''; await Obmin.importFile(f); }
     else if (t.matches('[data-photo]')) { await addPhotos(t.dataset.photo, [...t.files]); t.value = ''; }
     else if (t.matches('[data-pick]')) { F.pick(t.files); t.value = ''; }
+    else if (t.matches('[data-cam]')) {
+      const fs = [...t.files];
+      t.value = '';
+      if (!fs.length) return;
+      closeSheet();
+      Kamera.start(fs);
+    }
     else if (t.matches('[data-ocr]')) {
       const fs = [...t.files];
       t.value = '';
@@ -449,6 +457,10 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.20.0': [
+      'Кнопка «Додати» → «Сфотографувати» тепер сама впізнає, що на фото: чек АЗС, приладка (пробіг) чи документ СТО.',
+      'Після фото — підтвердження: «Схоже на чек АЗС / приладку», прочитані числа і кнопка «Зберегти». Помилилась — «Ні, це документ СТО».',
+    ],
     '0.19.0': [
       'Витрати: угорі — скільки машина коштує на місяць і на 1 км (за останні 12 місяців) і смуга часток: ТО, пальне, дрібні витрати.',
       'Мої запчастини: пошук за назвою чи номером і попередження, якщо номер, що стояв, не збігається з оригіналом чи аналогами.',
