@@ -74,6 +74,7 @@ const F = (() => {
   }
 
   const DEFS = {
+    part: Parts.def,
     work: {
       title: 'Запис у журналі', t: 'work',
       fields: () => [

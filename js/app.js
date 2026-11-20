@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.14.0';
+  const VERSION = '0.15.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -37,6 +37,7 @@ const App = (() => {
         case 'probih': r = V.probih(); break;
         case 'palne': r = P.screen(); break;
         case 'shyny': r = T.screen(); break;
+        case 'zapchasty': r = Parts.screen(); break;
         case 'poizdky': r = Trip.screen(); break;
         case 'poizdka': r = Trip.tripScreen(b); break;
         case 'dribni': r = Trip.expScreen(); break;
@@ -290,6 +291,7 @@ const App = (() => {
         F.itemsTotal(form);
         break;
       }
+      case 'parts-seed': await Parts.seed(); route(); break;
       case 'tg-add': T.addGroup(); break;
       case 'tg-del': el.closest('.tg-ed').remove(); break;
       case 'bolts-ok': await T.boltsOk(el.dataset.id); route(); break;
@@ -441,6 +443,11 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.15.0': [
+      'Новий розділ «Мої запчастини» (Ще → «Мої запчастини»): свій короткий список під ваш автомобіль — номер оригіналу, аналоги, що стоїть зараз, нотатка «ставив / не брати».',
+      'Кнопка «Заповнити з актів СТО» додає номери, що справді стояли у ваших актах (олива, фільтри, свічки, рідини, колодки…). Чого в актах не було — порожній рядок «знайти за VIN».',
+      'Біля кожного номера — пошук на сайтах Intercars, Omega, Exist і кнопка «Скопіювати номер». Ціни програма не показує. Список передається між пристроями разом з рештою даних.',
+    ],
     '0.14.0': [
       'Чек АЗС читається з фото: «Заправка» → додайте фото чека (камера чи галерея) — програма сама заповнить дату, літри, суму, ціну, пальне й АЗС.',
       'Ціна за літр ставиться вже з урахуванням знижки (сума ÷ літри). Поля з жовтим тлом програма прочитала сама — звірте їх із чеком і виправте, якщо треба.',
