@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.9.0';
+  const VERSION = '0.10.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -14,8 +14,8 @@ const App = (() => {
     return { parts: path.split('/').map(decodeURIComponent), q: new URLSearchParams(i < 0 ? '' : h.slice(i + 1)) };
   }
 
-  const TAB_OF = { '': 'stan', stan: 'stan', rule: 'stan', zhurnal: 'zhurnal', docs: 'docs', doc: 'docs', vytraty: 'vytraty', foto: 'docs', share: 'docs' };
-  const TAB_OF_EDIT = { work: 'zhurnal', visit: 'zhurnal', doc: 'docs', odo: 'stan' };
+  const TAB_OF = { '': 'stan', stan: 'stan', rule: 'stan', zhurnal: 'zhurnal', docs: 'docs', doc: 'docs', vytraty: 'vytraty', palne: 'vytraty', foto: 'docs', share: 'docs' };
+  const TAB_OF_EDIT = { work: 'zhurnal', visit: 'zhurnal', doc: 'docs', odo: 'stan', fuel: 'vytraty' };
 
   function route() {
     const { parts, q } = parse();
@@ -35,6 +35,7 @@ const App = (() => {
         case 'reglament': r = V.reglament(); break;
         case 'notes': r = V.notes(); break;
         case 'probih': r = V.probih(); break;
+        case 'palne': r = P.screen(); break;
         case 'obmin': r = V.obmin(); break;
         case 'excel': r = Excel.screen(); break;
         case 'nalashtuvannia': r = V.nalashtuvannia(); break;
@@ -92,6 +93,7 @@ const App = (() => {
       <div class="item"><b>Документ з фото</b><div class="sub">Програма прочитає дату, суму, позиції — ви перевірите</div>
         <div class="actions">${V.ocrButtons()}</div></div>
       <a class="item" href="#/edit/doc/new"><b>Новий документ / чек вручну</b><div class="sub">Акт, накладна, чек — з позиціями і фото</div></a>
+      <a class="item" href="#/edit/fuel/new"><b>Заправка</b><div class="sub">Літри, сума, пробіг — для витрати пального</div></a>
       <a class="item" href="#/edit/odo/new"><b>Записати пробіг</b><div class="sub">Показ одометра</div></a>
       <a class="item" href="#/edit/note/new"><b>Нотатка</b><div class="sub">Порада механіка, нагадування</div></a>
       <button class="btn ghost wide" data-act="sheet-close">Закрити</button>`);
@@ -290,6 +292,7 @@ const App = (() => {
       case 'folder-show': Obmin.fillFolder(true); break;
       case 'folder-import': Obmin.importFromFolder(+el.dataset.i); break;
       case 'backup-now': Obmin.backupNow(); break;
+      case 'ics': P.ics(); break;
       case 'data-ok': dataOk(el.dataset.ids, el.dataset.codes); break;
       case 'data-back': dataOk(el.dataset.ids, null); break;
       case 'share-doc': {
@@ -329,6 +332,7 @@ const App = (() => {
     const t = ev.target;
     if (t.matches('[data-act="import"]')) { const f = t.files[0]; t.value = ''; await Obmin.importFile(f); }
     else if (t.matches('[data-photo]')) { await addPhotos(t.dataset.photo, [...t.files]); t.value = ''; }
+    else if (t.matches('[data-pick]')) { F.pick(t.files); t.value = ''; }
     else if (t.matches('[data-ocr]')) {
       const fs = [...t.files];
       t.value = '';
@@ -414,6 +418,13 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.10.0': [
+      'Пальне: «+» → «Заправка» (і ярлик «Заправка» на значку). Літри, ціна за літр, сума — досить двох, третє програма порахує. Вкажіть пробіг; за бажанням — фото чека.',
+      'Ще → «Пальне»: середня витрата на 100 км і вартість кілометра — за 3 місяці, рік і весь час. До повного бака заправлятися не треба: витрата рахується за період.',
+      '«Витрати»: у кожному році окремо пальне і «разом утримання»; у таблиці Excel — новий аркуш «Пальне». Пробіг із заправок теж іде в строки ТО.',
+      'Новий місяць — на головному екрані нагадування записати пробіг, доки цього місяця його ще немає.',
+      'Ще → Налаштування → «Нагадування в календарі»: щомісяця 1-го — пробіг, навесні й восени — шини. Календар телефона нагадуватиме сам.',
+    ],
     '0.9.0': [
       'Автокопія: якщо вибрано папку програми (Ще → Обмін даними), програма сама тримає в ній свіжу повну копію даних з фото — один файл, він перезаписується після змін.',
       'Якщо резервної копії не було понад тиждень, а зміни є, — на головному екрані з’явиться нагадування з кнопкою «Зробити копію».',

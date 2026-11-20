@@ -26,6 +26,7 @@ const M = (() => {
   const works = () => DB.list('work').sort(byDate);
   const odos = () => DB.list('odo').sort(byDate);
   const docs = () => DB.list('doc').sort(byDate);
+  const fuels = () => DB.list('fuel').sort((a, b) => byDate(a, b) || (a.u || 0) - (b.u || 0));
   const notes = () => DB.list('note').sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || (b.date || '').localeCompare(a.date || ''));
 
   // Усі відомі покази одометра (оцінки не беремо).
@@ -34,6 +35,7 @@ const M = (() => {
     for (const r of odos()) if (r.date && r.km != null && !r.kmEst) pts.push({ date: r.date, km: r.km });
     for (const r of works()) if (r.date && r.km != null && !r.kmEst) pts.push({ date: r.date, km: r.km });
     for (const r of docs()) if (r.date && r.km != null && !r.kmEst) pts.push({ date: r.date, km: r.km });
+    for (const r of DB.list('fuel')) if (r.date && r.km != null) pts.push({ date: r.date, km: r.km });
     return pts.sort(byDate);
   }
   const current = (pts = points()) => pts.length ? pts[pts.length - 1] : null;
@@ -156,12 +158,18 @@ const M = (() => {
   function expenses() {
     const years = new Map();
     const pts = points();
+    const yearOf = y => { let Y = years.get(y); if (!Y) years.set(y, Y = { year: y, total: 0, count: 0, cats: {}, fuel: 0, fuelL: 0, fuelN: 0 }); return Y; };
+    // Пальне — окремо від ТО і ремонту.
+    for (const f of fuels()) {
+      if (!f.date) continue;
+      const Y = yearOf(+f.date.slice(0, 4));
+      Y.fuel += f.sum || 0; Y.fuelN++;
+      Y.fuelL += f.litres != null ? f.litres : f.sum && f.price ? f.sum / f.price : 0;
+    }
     for (const d of docs()) {
       if (!d.count || !d.date) continue;
-      const y = +d.date.slice(0, 4);
       const { total, itemsSum, coef } = docTotal(d);
-      let Y = years.get(y);
-      if (!Y) years.set(y, Y = { year: y, total: 0, count: 0, cats: {} });
+      const Y = yearOf(+d.date.slice(0, 4));
       Y.total += total; Y.count++;
       if (itemsSum > 0) {
         for (const i of d.items) {
@@ -174,7 +182,7 @@ const M = (() => {
     const today = U.today(), thisYear = +today.slice(0, 4);
     if (years.size) {
       const first = Math.min(...years.keys());
-      for (let y = first; y <= thisYear; y++) if (!years.has(y)) years.set(y, { year: y, total: 0, count: 0, cats: {} });
+      for (let y = first; y <= thisYear; y++) yearOf(y);
     }
     for (const Y of years.values()) Object.assign(Y, yearKm(Y.year, pts, today) || {});
     return [...years.values()].sort((a, b) => b.year - a.year);
@@ -300,13 +308,13 @@ const M = (() => {
   // «Гаразд» запам'ятовує коди в записі (ok) — пункт повернеться лише з новою причиною.
   // Записи журналу, прив'язані до документа, ідуть одним пунктом із ним.
   const DOUBT_RE = /уточн|не\s+видн|не\s+вказ|непевн|пробіг[^.;\n]{0,15}оцінк|взято\s+оцінк/i;
-  const DOUBT_FIELDS = { work: [['note', 'Примітка']], doc: [['about', 'Зміст'], ['seller', 'СТО'], ['number', 'Номер']], odo: [['src', 'Звідки']] };
+  const DOUBT_FIELDS = { work: [['note', 'Примітка']], doc: [['about', 'Зміст'], ['seller', 'СТО'], ['number', 'Номер']], odo: [['src', 'Звідки']], fuel: [['note', 'Примітка']] };
   const clip = (s, n = 140) => { s = String(s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 
   function issues() {
     const out = [];
     const add = (r, code, why, other) => out.push({ r, code, why, other: other || null });
-    const os = odos(), ws = works(), ds = docs(), all = [...os, ...ws, ...ds];
+    const os = odos(), ws = works(), ds = docs(), all = [...os, ...ws, ...ds, ...fuels()];
     for (const r of all) if (r.kmEst && r.km != null) add(r, 'est', 'Пробіг ' + U.km(r.km, true) + ' — лише оцінка');
     for (const r of all) {
       for (const [f, label] of DOUBT_FIELDS[r.t]) if (typeof r[f] === 'string' && DOUBT_RE.test(r[f])) add(r, 'txt', label + ': ' + clip(r[f]));
@@ -352,7 +360,7 @@ const M = (() => {
   }
 
   return {
-    ST, CATS, DOC_KINDS, vehicle, rules, works, odos, docs, notes, points, current, rate, kmAt,
+    ST, CATS, DOC_KINDS, vehicle, rules, works, odos, docs, fuels, notes, points, current, rate, kmAt,
     context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, yearKm, totalKm, docRules, used, usedCats,
     issues, checkList,
   };

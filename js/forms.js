@@ -117,6 +117,22 @@ const F = (() => {
       ],
       defaults: () => ({ order: Math.max(0, ...DB.list('rule').map(r => r.order || 0)) + 1 }),
     },
+    fuel: {
+      title: 'Заправка', t: 'fuel',
+      fields: () => [
+        { k: 'date', label: 'Дата', type: 'date', req: true },
+        { k: 'km', label: 'Пробіг за одометром, км', type: 'number', mode: 'numeric', hint: 'від нього залежить розрахунок витрати' },
+        { k: 'litres', label: 'Літрів', type: 'number' },
+        { k: 'price', label: 'Ціна за літр, грн', type: 'number' },
+        { k: 'sum', label: 'Сума, грн', type: 'number', hint: 'досить двох із трьох — третє програма порахує' },
+        { k: 'fuel', label: 'Пальне', type: 'text', list: M.used('fuel', 'fuel', P.FUELS) },
+        { k: 'station', label: 'АЗС', type: 'text', list: M.used('fuel', 'station', P.STATIONS) },
+        { k: 'missed', label: 'Попередню заправку не записано (чек загубився)', type: 'check' },
+        { k: 'note', label: 'Примітка', type: 'textarea', rows: 2 },
+      ],
+      defaults: () => { const l = M.fuels().pop(); return { date: U.today(), fuel: l && l.fuel ? l.fuel : 'А-95' }; },
+      check: r => P.complete(r) && kmOk(r.date, r.km),
+    },
     note: {
       title: 'Нотатка', t: 'note',
       fields: () => [
@@ -152,15 +168,38 @@ const F = (() => {
     if (isNew) rec = Object.assign({}, def.defaults ? def.defaults(q) : {});
     else rec = type === 'vehicle' ? M.vehicle() : DB.get(id);
     if (!rec) return V.notFound();
+    const fuel = type === 'fuel';
+    if (fuel) picked = [];
     return {
       // Новий показ пробігу — одразу курсор у полі (на телефоні відкриється цифрова клавіатура).
-      after: isNew && type === 'odo' ? () => { const el = document.getElementById('f_km'); if (el) el.focus(); } : null,
+      after: isNew && type === 'odo' ? () => { const el = document.getElementById('f_km'); if (el) el.focus(); }
+        : fuel ? () => { P.hint(document.querySelector('form[data-form="fuel"]')); if (!isNew) App.showPhotos(id); } : null,
       title: def.title, back: true, form: true, html: `
       <form class="panel form" data-form="${type}" data-id="${isNew ? '' : e(id)}">
         ${def.fields().map(f => field(f, rec[f.k])).join('')}
+        ${fuel ? '<p class="small err" id="fuelMsg" hidden></p>' : ''}
+        ${fuel && isNew ? `<div class="fld"><span>Фото чека <small>за бажанням — збережеться із заправкою</small></span>
+          <div class="row"><label class="btn small">Камера<input type="file" accept="image/*" capture="environment" data-pick hidden></label>
+          <label class="btn small ghost">З галереї<input type="file" accept="image/*" multiple data-pick hidden></label>
+          <span class="muted small" id="pickCount"></span></div></div>` : ''}
         ${actions(isNew, type !== 'vehicle')}
-      </form>`,
+      </form>
+      ${fuel && !isNew ? `<section class="panel">
+        <div class="row"><h3 class="grow">Фото чека</h3>
+          <label class="btn small">Камера<input type="file" accept="image/*" capture="environment" data-photo="${e(id)}" hidden></label>
+          <label class="btn small ghost">З галереї<input type="file" accept="image/*" multiple data-photo="${e(id)}" hidden></label>
+        </div>
+        <div class="photos" id="photos"></div>
+      </section>` : ''}`,
     };
+  }
+
+  // Фото чека для нової заправки: збираємо, доки форму не збережено.
+  let picked = [];
+  function pick(files) {
+    picked = picked.concat([...files]);
+    const el = document.getElementById('pickCount');
+    if (el) el.textContent = picked.length ? 'вибрано фото: ' + picked.length : '';
   }
 
   // ---------- кілька робіт за один візит ----------
@@ -362,6 +401,7 @@ const F = (() => {
   // Автосума позиції: к-сть × ціна, доки суму не введено вручну.
   function onInput(ev) {
     const t = ev.target, form = t.form;
+    if (form && form.dataset.form === 'fuel') { P.hint(form); return; }
     if (!form || form.dataset.form !== 'doc') return;
     const auto = t.closest('.auto');
     if (auto) auto.classList.remove('auto'); // власник виправив — позначку знімаємо
@@ -418,6 +458,11 @@ const F = (() => {
     const rec = Object.assign({}, base, vals);
     if (def.check && !def.check(rec)) return false;
     await DB.save(rec);
+    if (type === 'fuel' && picked.length) {
+      U.toast('Зберігаю фото…', 10000);
+      for (const f of picked) await DB.addFile(rec.id, await U.compressImage(f));
+      picked = [];
+    }
     U.toast('Збережено');
     return true;
   }
@@ -434,12 +479,16 @@ const F = (() => {
       const n = DB.filesOf(id).length;
       msg = 'Видалити документ' + (n ? ' разом із фото (' + n + ')' : '') + '? Записи в журналі лишаться.';
     }
+    if (type === 'fuel') {
+      const n = DB.filesOf(id).length;
+      msg = 'Видалити заправку' + (n ? ' разом із фото чека (' + n + ')' : '') + '?';
+    }
     if (!confirm(msg)) return false;
-    if (type === 'doc') await DB.removeFiles(DB.filesOf(id).map(f => f.id));
+    if (type === 'doc' || type === 'fuel') await DB.removeFiles(DB.filesOf(id).map(f => f.id));
     await DB.remove(id);
     U.toast('Видалено');
     return { go: type === 'doc' ? '#/docs' : type === 'rule' ? '#/reglament' : null };
   }
 
-  return { render, submit, del, onInput, itemEd, itemsTotal, setPending };
+  return { render, submit, del, onInput, itemEd, itemsTotal, setPending, pick };
 })();

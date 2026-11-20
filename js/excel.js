@@ -6,7 +6,7 @@ const Excel = (() => {
   // ---------- оформлення ----------
   // Номери стилів клітинок (порядок збігається з XF нижче).
   const S = { text: 0, head: 1, title: 2, date: 3, km: 4, kmEst: 5, money: 6, coef: 7, wrap: 8,
-    over: 9, soon: 10, nodata: 11, ok: 12, bold: 13, moneyBold: 14, note: 15 };
+    over: 9, soon: 10, nodata: 11, ok: 12, bold: 13, moneyBold: 14, note: 15, lit: 16, dec1: 17 };
   // [формат числа, шрифт, заливка, рамка, вирівнювання]
   const XF = [
     [0, 0, 0, 0, 'top'],          // text
@@ -25,6 +25,8 @@ const Excel = (() => {
     [0, 1, 0, 0, 'top'],          // bold
     [4, 1, 0, 0, 'top'],          // moneyBold
     [0, 3, 0, 0, ''],             // note — дрібний сірий курсив
+    [2, 0, 0, 0, 'top'],          // lit — літри 12,34
+    [167, 0, 0, 0, 'top'],        // dec1 — л/100 км 7,4
   ];
   const ALIGN = {
     '': '', top: '<alignment vertical="top"/>', left: '<alignment horizontal="left" vertical="top"/>',
@@ -34,7 +36,7 @@ const Excel = (() => {
   const font = (extra, sz = 11, color = '') => `<font>${extra}<sz val="${sz}"/>${color ? `<color rgb="FF${color}"/>` : ''}<name val="Calibri"/><family val="2"/></font>`;
   const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<numFmts count="3"><numFmt numFmtId="164" formatCode="dd.mm.yyyy"/><numFmt numFmtId="165" formatCode="&quot;≈ &quot;#,##0;&quot;≈ -&quot;#,##0"/><numFmt numFmtId="166" formatCode="0.000"/></numFmts>
+<numFmts count="4"><numFmt numFmtId="164" formatCode="dd.mm.yyyy"/><numFmt numFmtId="165" formatCode="&quot;≈ &quot;#,##0;&quot;≈ -&quot;#,##0"/><numFmt numFmtId="166" formatCode="0.000"/><numFmt numFmtId="167" formatCode="0.0"/></numFmts>
 <fonts count="4">${font('')}${font('<b/>')}${font('<b/>', 14)}${font('<i/>', 10, '595959')}</fonts>
 <fills count="7"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>${fill('DCE6F1')}${fill('FFC7CE')}${fill('FFEB9C')}${fill('E7E6E6')}${fill('C6EFCE')}</fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FF8EA9C1"/></bottom><diagonal/></border></borders>
@@ -243,25 +245,51 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
       [{ v: 'Витрати на обслуговування', s: S.title }],
       [{ v: 'Лише документи з позначкою «у витратах». Позиції перераховано з поправкою на знижку чи ПДВ, щоб разом вийшла сума документа.', s: S.note }],
       [],
-      head(['Рік', 'Сума, грн', 'Документів', 'Пробіг за рік, км', 'Грн на 1000 км', 'Примітка']),
+      head(['Рік', 'ТО і ремонт, грн', 'Документів', 'Пробіг за рік, км', 'ТО і ремонт: грн на 1000 км', 'Пальне, грн', 'Пальне, л', 'Разом утримання, грн', 'Примітка']),
     ];
     for (const y of ys) {
       const note = [y.kmEst ? 'пробіг — оцінка між показами' : '', y.kmFirst ? 'неповний рік: облік з ' + U.date(y.kmFrom) : y.kmNow ? 'рік ще триває' : '',
         y.count ? '' : 'документів немає'].filter(Boolean).join('; ');
-      rows.push([y.year, Mo(y.total), y.count, K(y.km), Mo(y.km && y.total ? y.total / y.km * 1000 : null), note || null]);
+      rows.push([y.year, Mo(y.total), y.count, K(y.km), Mo(y.km && y.total ? y.total / y.km * 1000 : null),
+        Mo(y.fuelN ? y.fuel : null), { v: y.fuelN ? Math.round(y.fuelL * 100) / 100 : null, s: S.lit }, Mo(y.total + y.fuel), note || null]);
     }
     const all = ys.reduce((a, y) => a + y.total, 0), cnt = ys.reduce((a, y) => a + y.count, 0);
-    rows.push([{ v: 'Разом', s: S.bold }, { v: Math.round(all * 100) / 100, s: S.moneyBold }, { v: cnt, s: S.bold }]);
+    const fuel = ys.reduce((a, y) => a + y.fuel, 0), fuelL = ys.reduce((a, y) => a + y.fuelL, 0);
+    const mb = n => ({ v: Math.round(n * 100) / 100, s: S.moneyBold });
+    rows.push([{ v: 'Разом', s: S.bold }, mb(all), { v: cnt, s: S.bold }, null, null, mb(fuel), { v: Math.round(fuelL * 100) / 100, s: S.lit }, mb(all + fuel)]);
     rows.push([], [{ v: 'За категоріями', s: S.bold }]);
     const cats = {};
     ys.forEach(y => Object.entries(y.cats).forEach(([c, s]) => { cats[c] = (cats[c] || 0) + s; }));
     const order = Object.keys(cats).filter(c => cats[c] > 0.005).sort((a, b) => cats[b] - cats[a]);
-    rows.push(head(['Категорія', ...ys.map(y => String(y.year)), 'Разом']));
+    rows.push(head(['Категорія (ТО і ремонт)', ...ys.map(y => String(y.year)), 'Разом']));
     for (const c of order) {
       rows.push([W(c), ...ys.map(y => Mo(y.cats[c] > 0.005 ? y.cats[c] : null)), { v: Math.round(cats[c] * 100) / 100, s: S.moneyBold }]);
     }
     rows.push([{ v: 'Разом', s: S.bold }, ...ys.map(y => ({ v: Math.round(y.total * 100) / 100, s: S.moneyBold })), { v: Math.round(all * 100) / 100, s: S.moneyBold }]);
-    return { name: 'Витрати', rows, freeze: [1, 0], cols: [34, ...Array(Math.max(4, ys.length + 1)).fill(13)] };
+    return { name: 'Витрати', rows, freeze: [1, 0], cols: [34, ...Array(Math.max(8, ys.length + 1)).fill(13)] };
+  }
+
+  function fuelSheet() {
+    const fs = M.fuels();
+    const rows = [
+      [{ v: 'Пальне', s: S.title }],
+      [{ v: 'До повного бака не заправлялись, тому витрата рахується за період: літри, залиті після першої заправки з пробігом і до останньої, ÷ пробіг між ними. Що довший період — то точніше.', s: S.note }],
+      [],
+      head(['Період', 'Л на 100 км', 'Грн на 1 км', 'Пробіг, км', 'Літрів', 'Сума, грн', 'Заправок', 'З', 'По', 'Примітка']),
+    ];
+    for (const p of P.periods()) {
+      const u = p.u;
+      rows.push(u ? [p.name, { v: Math.round(u.per100 * 10) / 10, s: S.dec1 }, Mo(u.perKm), K(u.km), { v: Math.round(u.litres * 100) / 100, s: S.lit },
+        Mo(u.sum), u.n, Dt(u.from), Dt(u.to), u.approx ? 'приблизно — ще мало заправок' : null] : [p.name, null, null, null, null, null, null, null, null, 'мало даних']);
+    }
+    rows.push([]);
+    const hr = rows.length + 1;
+    rows.push(head(['Дата', 'Пробіг, км', 'Літрів', 'Ціна, грн/л', 'Сума, грн', 'Пальне', 'АЗС', 'Попередню не записано', 'Примітка', 'Фото чека, шт.']));
+    for (const f of fs) {
+      rows.push([Dt(f.date), K(f.km), { v: Math.round(P.litres(f) * 100) / 100, s: S.lit }, Mo(f.price), Mo(f.sum), f.fuel, W(f.station),
+        f.missed ? 'Так' : null, W(f.note), DB.filesOf(f.id).length || null]);
+    }
+    return table({ name: 'Пальне', rows, freeze: [0, hr], cols: [12, 11, 10, 11, 12, 10, 16, 12, 40, 9] }, hr, fs.length, 10);
   }
 
   function probihSheet() {
@@ -289,7 +317,7 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
   async function build() {
     const now = new Date();
     const v = M.vehicle();
-    const sheets = [stanSheet(now), zhurnalSheet(), docsSheet(), itemsSheet(), costsSheet(), probihSheet(), reglamentSheet(), notesSheet()];
+    const sheets = [stanSheet(now), zhurnalSheet(), docsSheet(), itemsSheet(), costsSheet(), fuelSheet(), probihSheet(), reglamentSheet(), notesSheet()];
     const blob = await write(sheets, v.name + ' — облік ТО');
     const name = `кашкай_таблиця_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.xlsx`;
     return new File([blob], name, { type: MIME });
@@ -326,8 +354,8 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
     return {
       title: 'Таблиця Excel', back: true, html: `
       <section class="panel">
-        <p>Усі дані одним файлом Excel: стан вузлів, журнал робіт, документи і їхні позиції, витрати за роками й категоріями, пробіг, регламент, нотатки.</p>
-        <p class="muted small">Записів у журналі: ${M.works().length}, документів: ${M.docs().length}, позицій: ${items}. Фото документів у таблицю не входять — вони є в копії «Обмін даними».</p>
+        <p>Усі дані одним файлом Excel: стан вузлів, журнал робіт, документи і їхні позиції, витрати за роками й категоріями, пальне, пробіг, регламент, нотатки.</p>
+        <p class="muted small">Записів у журналі: ${M.works().length}, документів: ${M.docs().length}, позицій: ${items}, заправок: ${M.fuels().length}. Фото у таблицю не входять — вони є в копії «Обмін даними».</p>
         <p class="actions"><button class="btn" data-act="excel-save">Зберегти таблицю</button></p>
         <div id="excelOut"></div>
       </section>
