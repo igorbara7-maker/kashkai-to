@@ -216,6 +216,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
 .ready { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-top: 12px; background: var(--bg); }
 .ready p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.files { display: grid; gap: 6px; margin: 4px 0 12px; }
+.file-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--bg); }
+.file-row > span { min-width: 0; overflow-wrap: anywhere; }
+.file-row .sub { display: block; }
+.file-row .btn { flex: none; }
 .nodes { display: grid; gap: 2px; margin-bottom: 10px; }
 .node .what { display: none; margin: 2px 0 8px 32px; width: calc(100% - 32px); }
 .node:has(input[type=checkbox]:checked) .what { display: block; }

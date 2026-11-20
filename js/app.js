@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.4.1';
+  const VERSION = '0.5.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -179,6 +179,10 @@ const App = (() => {
       case 'obmin-save': Obmin.save(); break;
       case 'dev-rename': Obmin.rename(); break;
       case 'excel-save': Excel.save(); break;
+      case 'folder-choose': Obmin.chooseFolder(); break;
+      case 'folder-forget': Obmin.forgetFolder(); break;
+      case 'folder-show': Obmin.fillFolder(true); break;
+      case 'folder-import': Obmin.importFromFolder(+el.dataset.i); break;
       case 'photo-open': openPhoto(el.dataset.id); break;
       case 'photo-del': {
         if (!confirm('Видалити це фото?')) return;

@@ -116,11 +116,12 @@ const Obmin = (() => {
     if (!ready || !out) return;
     const f = ready.file, s = ready.sum, share = canShare(f);
     const phone = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+    const dir = Folder.name() ? `папка «${e(Folder.name())}»` : 'папка «Завантаження» (Download)';
     const hint = share
       ? '«Надіслати» → виберіть <b>LocalSend</b> → пристрій, на який надсилаєте.'
       : phone
-        ? 'Натисніть «Зберегти у файл». Потім у <b>LocalSend</b>: «Надіслати» → «Файл» → папка «Завантаження» (Download) → цей файл.'
-        : 'Файл ляже в папку «Завантаження». Перетягніть його у вікно <b>LocalSend</b> і виберіть пристрій.';
+        ? `Натисніть «Зберегти у файл». Потім у <b>LocalSend</b>: «Надіслати» → «Файл» → ${dir} → цей файл.`
+        : `Файл ляже в ${Folder.name() ? 'папку «' + e(Folder.name()) + '»' : 'папку «Завантаження»'}. Перетягніть його у вікно <b>LocalSend</b> і виберіть пристрій.`;
     out.innerHTML = `<div class="ready">
         <p><b>Файл готовий</b><br><span class="small">${e(f.name)}</span><br>
         <span class="sub">${size(f.size)} · записів ${s.records}, фото ${s.photos}</span></p>
@@ -139,10 +140,68 @@ const Obmin = (() => {
       U.toast('Цей пристрій не надсилає такі файли напряму — натисніть «Зберегти у файл»', 6000);
     }
   }
-  function save() {
+  async function save() {
     if (!ready) return;
-    U.download(ready.file.name, ready.file);
-    U.toast('Файл збережено в «Завантаження»', 4000);
+    const f = ready.file;
+    let msg = 'Файл збережено в «Завантаження»';
+    try {
+      if (await Folder.save(f)) msg = `Файл збережено в папку «${Folder.name()}»`;
+      else U.download(f.name, f);
+    } catch (err) {
+      console.error(err);
+      U.download(f.name, f);
+      msg = `У папку «${Folder.name()}» записати не вдалося — файл збережено в «Завантаження»`;
+    }
+    await Folder.made(f.name);
+    U.toast(msg, 5000);
+  }
+
+  // ---------- папка програми ----------
+  let folderList = [];
+  async function fillFolder(ask) {
+    const box = $('folderFiles');
+    if (!box || !Folder.name()) return;
+    const fn = e(Folder.name());
+    let fs;
+    try { fs = await Folder.copies(ask); }
+    catch (err) {
+      console.error(err);
+      box.innerHTML = `<p class="err">Папку «${fn}» прочитати не вдалося: ${e(err.message)}. Виберіть її ще раз унизу сторінки.</p>`;
+      return;
+    }
+    if (!fs) {
+      box.innerHTML = `<p class="actions"><button class="btn" data-act="folder-show">Показати файли з папки «${fn}»</button></p>`;
+      return;
+    }
+    folderList = fs.slice(0, 5);
+    box.innerHTML = folderList.length
+      ? `<p class="small">Отримані файли в папці «${fn}», найновіші зверху:</p>
+        <div class="files">${folderList.map((f, i) => { const g = Folder.isGot(f.name); return `<div class="file-row"><span><b>${e(f.name)}</b>
+          <span class="sub">${when(f.lastModified)} · ${size(f.size)}${g ? ' · уже прийнято' : ''}</span></span>
+          <button class="btn small${g ? ' ghost' : ''}" data-act="folder-import" data-i="${i}">Прийняти</button></div>`; }).join('')}</div>`
+      : `<p class="muted small">У папці «${fn}» отриманих файлів поки немає.</p>`;
+  }
+  async function importFromFolder(i) {
+    const f = folderList[i];
+    if (!f) return;
+    await Folder.got(f.name);
+    await importFile(f);
+  }
+  async function chooseFolder() {
+    try {
+      const h = await Folder.choose();
+      if (!h) return;
+      U.toast(`Папка «${h.name}» вибрана`, 4000);
+    } catch (err) {
+      console.error(err);
+      U.toast('Цю папку вибрати не можна — створіть у «Завантаженнях» папку «Кашкай» і виберіть її', 7000);
+    }
+    App.refresh();
+  }
+  async function forgetFolder() {
+    if (!confirm(`Більше не використовувати папку «${Folder.name()}»? Файли в ній лишаться, нові ляжуть у «Завантаження».`)) return;
+    await Folder.forget();
+    App.refresh();
   }
 
   async function rename() {
@@ -278,12 +337,35 @@ const Obmin = (() => {
       </section>
       <section class="panel">
         <h3>Прийняти копію</h3>
-        <p>Файл з іншого пристрою (LocalSend кладе отримане зазвичай у «Завантаження») або файл імпорту з книги Excel. Нічого не затирається: з двох версій одного запису лишається новіша, видалене на іншому пристрої видаляється й тут.</p>
-        <label class="btn">Вибрати файл<input type="file" accept=".zip,.json,application/zip,application/x-zip-compressed,application/json,application/octet-stream" data-act="import" hidden></label>
+        <p>Файл з іншого пристрою (LocalSend кладе отримане ${Folder.name() ? 'туди, куди вкажете в його налаштуваннях' : 'зазвичай у «Завантаження»'}) або файл імпорту з книги Excel. Нічого не затирається: з двох версій одного запису лишається новіша, видалене на іншому пристрої видаляється й тут.</p>
+        <div id="folderFiles"></div>
+        <label class="btn${Folder.name() ? ' ghost' : ''}">Вибрати файл<input type="file" accept=".zip,.json,application/zip,application/x-zip-compressed,application/json,application/octet-stream" data-act="import" hidden></label>
         <div id="importRes"></div>
-      </section>`,
+      </section>
+      ${folderPanel()}`,
+      after: () => fillFolder(false),
     };
   }
 
-  return { screen, make, share, save, rename, importFile, readCopy, build, select };
+  function folderPanel() {
+    if (!Folder.supported()) return '';
+    const n = Folder.name();
+    return n
+      ? `<section class="panel">
+        <h3>Папка програми: «${e(n)}»</h3>
+        <p class="muted small">Сюди лягають копії й таблиці Excel, а отримані файли з неї програма показує вище — шукати не треба. Щоб LocalSend клав отримане сюди ж: LocalSend → «Налаштування» → папка для отриманих файлів → «${e(n)}».</p>
+        <p class="actions"><button class="btn ghost small" data-act="folder-choose">Вибрати іншу</button>
+          <button class="btn ghost small" data-act="folder-forget">Не використовувати</button></p>
+      </section>`
+      : `<section class="panel">
+        <h3>Окрема папка для файлів</h3>
+        <p class="muted small">Щоб не шукати файли серед усіх завантажень: натисніть «Вибрати папку», відкрийте «Завантаження» (Download), створіть там папку <b>Кашкай</b> і виберіть її. Тоді копії й таблиці лягатимуть туди, а отримані файли програма покаже сама.</p>
+        <p class="actions"><button class="btn ghost" data-act="folder-choose">Вибрати папку</button></p>
+      </section>`;
+  }
+
+  return {
+    screen, make, share, save, rename, importFile, readCopy, build, select,
+    fillFolder, importFromFolder, chooseFolder, forgetFolder,
+  };
 })();

@@ -299,14 +299,18 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
     const out = document.getElementById('excelOut');
     out.innerHTML = '<p class="muted">Готую таблицю…</p>';
     try {
+      const dir = await Folder.access(true);   // дозвіл на папку питаємо одразу після натискання
       const f = await build();
-      U.download(f.name, f);
+      let inDir = false;
+      if (dir) { try { inDir = await Folder.save(f, dir); } catch (x) { console.error(x); } }
+      if (!inDir) U.download(f.name, f);
+      const where = inDir ? `«Завантаження» → «${U.esc(Folder.name())}»` : '«Завантаження»';
       const phone = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
       out.innerHTML = `<div class="ready"><p><b>Таблицю збережено</b><br><span class="small">${U.esc(f.name)}</span><br>
-        <span class="sub">${Math.max(1, Math.round(f.size / 1024))} КБ, папка «Завантаження»</span></p>
+        <span class="sub">${Math.max(1, Math.round(f.size / 1024))} КБ, папка ${inDir ? '«' + U.esc(Folder.name()) + '»' : '«Завантаження»'}</span></p>
         <p class="muted small">${phone
-          ? 'Відкрийте її з повідомлення про завантаження або через «Файли» → «Завантаження». Потрібна програма для таблиць: Excel, Google Таблиці чи WPS Office.'
-          : 'Відкрийте її в Excel із папки «Завантаження».'}</p></div>`;
+          ? `Відкрийте її ${inDir ? '' : 'з повідомлення про завантаження або '}через «Файли» → ${where}. Потрібна програма для таблиць: Excel, Google Таблиці чи WPS Office.`
+          : `Відкрийте її в Excel із папки ${inDir ? '«' + U.esc(Folder.name()) + '»' : '«Завантаження»'}.`}</p></div>`;
     } catch (err) {
       console.error(err);
       out.innerHTML = `<p class="err">Не вдалося зробити таблицю: ${U.esc(err.message)}</p>`;
