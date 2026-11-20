@@ -83,9 +83,15 @@ const Obmin = (() => {
     };
   }
 
+  // Chrome, Edge, Opera (рушій Chromium) через «Поділитися» пускають лише фото, відео, PDF і текст:
+  // .zip відхиляють, хоча canShare відповідає «можна» (перевірено на Poco F7, 2026-11-20).
+  // Тому там — лише «Зберегти у файл». Якщо надсилання не вдалося деінде — пристрій це запам'ятовує.
+  const NO_SHARE = 'kashkai.noFileShare';
   function canShare(file) {
-    try { return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [file] })); }
-    catch (x) { return false; }
+    try {
+      if (navigator.userAgentData || localStorage.getItem(NO_SHARE)) return false;
+      return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [file] }));
+    } catch (x) { return false; }
   }
 
   async function make() {
@@ -98,23 +104,29 @@ const Obmin = (() => {
     out.innerHTML = '<p class="muted">Готую файл…</p>';
     try {
       ready = await build(peerId, (i, n) => { if (n > 3) out.innerHTML = `<p class="muted">Готую файл… ${i} з ${n}</p>`; });
-      const f = ready.file, s = ready.sum, share = canShare(f);
-      const phone = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
-      const hint = share
-        ? '«Надіслати» → виберіть <b>LocalSend</b> → пристрій, на який надсилаєте.'
-        : phone
-          ? 'Натисніть «Зберегти у файл». Потім у <b>LocalSend</b>: «Надіслати» → «Файл» → папка «Завантаження» (Download) → цей файл.'
-          : 'Файл ляже в папку «Завантаження». Перетягніть його у вікно <b>LocalSend</b> і виберіть пристрій.';
-      out.innerHTML = `<div class="ready">
-          <p><b>Файл готовий</b><br><span class="small">${e(f.name)}</span><br>
-          <span class="sub">${size(f.size)} · записів ${s.records}, фото ${s.photos}</span></p>
-          <p class="actions">${share ? '<button class="btn" data-act="obmin-share">Надіслати</button>' : ''}
-            <button class="btn${share ? ' ghost' : ''}" data-act="obmin-save">Зберегти у файл</button></p>
-          <p class="muted small">${hint}</p></div>`;
+      showReady();
     } catch (err) {
       console.error(err);
       out.innerHTML = `<p class="err">Не вдалося підготувати файл: ${e(err.message)}</p>`;
     } finally { busy = false; }
+  }
+
+  function showReady() {
+    const out = $('obminOut');
+    if (!ready || !out) return;
+    const f = ready.file, s = ready.sum, share = canShare(f);
+    const phone = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+    const hint = share
+      ? '«Надіслати» → виберіть <b>LocalSend</b> → пристрій, на який надсилаєте.'
+      : phone
+        ? 'Натисніть «Зберегти у файл». Потім у <b>LocalSend</b>: «Надіслати» → «Файл» → папка «Завантаження» (Download) → цей файл.'
+        : 'Файл ляже в папку «Завантаження». Перетягніть його у вікно <b>LocalSend</b> і виберіть пристрій.';
+    out.innerHTML = `<div class="ready">
+        <p><b>Файл готовий</b><br><span class="small">${e(f.name)}</span><br>
+        <span class="sub">${size(f.size)} · записів ${s.records}, фото ${s.photos}</span></p>
+        <p class="actions">${share ? '<button class="btn" data-act="obmin-share">Надіслати</button>' : ''}
+          <button class="btn${share ? ' ghost' : ''}" data-act="obmin-save">Зберегти у файл</button></p>
+        <p class="muted small">${hint}</p></div>`;
   }
 
   async function share() {
@@ -122,7 +134,9 @@ const Obmin = (() => {
     try { await navigator.share({ files: [ready.file], title: ready.file.name }); }
     catch (err) {
       if (err && err.name === 'AbortError') return;   // власник передумав
-      U.toast('Надіслати не вдалося — збережіть у файл', 5000);
+      try { localStorage.setItem(NO_SHARE, '1'); } catch (x) { /* без сховища — лише цього разу */ }
+      showReady();
+      U.toast('Цей пристрій не надсилає такі файли напряму — натисніть «Зберегти у файл»', 6000);
     }
   }
   function save() {

@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.4.0';
+  const VERSION = '0.4.1';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
