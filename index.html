@@ -18,18 +18,16 @@
   </button>
   <div class="top-title" id="topTitle">Кашкай ТО</div>
   <a class="top-km" id="topKm" href="#/edit/odo/new" title="Записати пробіг"></a>
+  <a class="top-gear" id="topGear" href="#/sche" aria-label="Обмін даними, Excel, налаштування" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></a>
 </header>
 <div class="banner" id="banner" hidden></div>
 <main id="view"><p class="muted">Завантаження…</p></main>
-<button class="fab" id="fab" type="button" data-act="fab" aria-label="Додати запис">
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
-</button>
 <nav class="tabs" id="tabs">
-  <a href="#/stan" data-tab="stan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16a8 8 0 1 1 16 0" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 16l4-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Стан</a>
-  <a href="#/zhurnal" data-tab="zhurnal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Журнал</a>
-  <a href="#/docs" data-tab="docs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z M14 3v4h4 M10 12h5M10 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>Документи</a>
+  <a href="#/stan" data-tab="stan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>Головна</a>
+  <a href="#/zhurnal" data-tab="hist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Історія</a>
+  <button type="button" class="tab-add" id="fab" data-act="fab" aria-label="Додати запис"><span class="tab-add-c"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></span>Додати</button>
   <a href="#/vytraty" data-tab="vytraty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Витрати</a>
-  <a href="#/sche" data-tab="sche"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg>Ще</a>
+  <a href="#/avto" data-tab="avto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15v-3l2-5h14l2 5v3zM3 15v3h3v-3M18 15v3h3v-3M6 12h12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/></svg>Авто</a>
 </nav>
 <div id="sheet" class="sheet hidden"></div>
 <div id="toast" class="toast hidden" role="status"></div>

@@ -116,7 +116,7 @@ const V = (() => {
     const block = (k, title) => grp[k].length ? `<h3 class="sec">${title} (${grp[k].length})</h3><div class="cards">${grp[k].map(card).join('')}</div>` : '';
     const rest = grp.later.length + grp.ok.length;
     return {
-      title: 'Стан', noTopKm: true, html: head
+      title: 'Головна', noTopKm: true, html: head
         + block('over', 'Прострочено') + block('soon', 'Незабаром') + block('nodata', 'Немає даних')
         + (rest ? `<details class="more"${grp.over.length + grp.soon.length + grp.nodata.length ? '' : ' open'}><summary>Гаразд і відкладене (${rest})</summary>`
           + block('later', 'Відкладено') + block('ok', 'Гаразд') + '</details>' : ''),
@@ -199,12 +199,15 @@ const V = (() => {
       </div>`;
     }).join('');
     return {
-      title: 'Журнал робіт', html: `
+      title: 'Історія', html: `
+      ${histSeg('zhurnal')}
       <div class="toolbar"><select data-nav-rule>${opt}</select></div>
       <p class="muted small">Записів: ${ws.length}. Натисніть на запис, щоб змінити.</p>
       ${html || '<p class="muted">Записів ще немає.</p>'}`,
     };
   }
+
+  const histSeg = on => `<div class="seg"><a href="#/zhurnal"${on === 'zhurnal' ? ' class="on"' : ''}>Роботи</a><a href="#/docs"${on === 'docs' ? ' class="on"' : ''}>Документи</a></div>`;
 
   // ---------- Документи ----------
   function docs() {
@@ -222,7 +225,8 @@ const V = (() => {
       </a>`;
     }).join('');
     return {
-      title: 'Документи', html: `
+      title: 'Історія', html: `
+      ${histSeg('docs')}
       <section class="panel"><b>Документ з фото</b>
         <p class="muted small">Програма прочитає дату, номер, суму, позиції — ви перевірите і збережете.</p>
         <div class="actions">${ocrButtons()}</div></section>
@@ -352,24 +356,35 @@ const V = (() => {
 
   // ---------- Ще ----------
   function sche() {
-    const n = M.notes().filter(x => !x.done).length;
     const nc = M.checkList().active.length;
     const link = (h, t, s) => `<a class="item" href="${h}"><b>${t}</b>${s ? `<div class="sub">${s}</div>` : ''}</a>`;
     return {
-      title: 'Ще', html: `<div class="list">
-        ${link('#/maistru', 'Список для майстра', 'Що зробити і перевірити — щоб показати чи надіслати на СТО')}
-        ${link('#/notes', 'Нотатки' + (n ? ` (${n})` : ''), 'Відкриті питання, поради механіків')}
-        ${link('#/perevirka', 'Перевірити дані' + (nc ? ` (${nc})` : ''), 'Оцінений пробіг, «уточніть», пробіг не по порядку, документи поза журналом')}
-        ${link('#/palne', 'Пальне', 'Заправки, середня витрата, вартість кілометра')}
-        ${link('#/shyny', 'Шини', 'Комплекти, що стоїть зараз, сезонні заміни, вік і протектор')}
-        ${link('#/zapchasty', 'Мої запчастини', 'Номери оригіналу й аналогів, що стоїть зараз, пошук у магазинах')}
-        ${link('#/poizdky', 'Поїздки' + (Trip.ongoing() ? ' (триває)' : ''), 'Пальне і витрати на машину в дорозі, підсумок поїздки')}
-        ${link('#/dribni', 'Дрібні витрати', 'Мийка, стоянка, платна дорога, доливання')}
-        ${link('#/probih', 'Пробіг', 'Усі покази одометра')}
-        ${link('#/reglament', 'Регламент', 'Пункти обслуговування та інтервали — можна правити')}
+      title: 'Дані і налаштування', back: true, html: `<div class="list">
         ${link('#/obmin', 'Обмін даними', 'Google Диск, файл для телефона чи компа, імпорт')}
         ${link('#/excel', 'Таблиця Excel', 'Усі дані одним файлом — переглянути, роздрукувати, надіслати')}
+        ${link('#/perevirka', 'Перевірити дані' + (nc ? ` (${nc})` : ''), 'Оцінений пробіг, «уточніть», пробіг не по порядку, документи поза журналом')}
         ${link('#/nalashtuvannia', 'Налаштування', 'Автомобіль, попередження, сховище')}
+      </div>`,
+    };
+  }
+
+  // ---------- Авто (паспорт і довідники) ----------
+  function avto() {
+    const v = M.context().v || {};
+    const link = (h, t, s) => `<a class="item" href="${h}"><b>${t}</b>${s ? `<div class="sub">${s}</div>` : ''}</a>`;
+    const n = M.notes().filter(x => !x.done).length;
+    return {
+      title: 'Авто', html: `
+      <section class="panel"><b>${e(v.name || 'Автомобіль')}</b>
+        ${v.vin ? `<div class="sub">VIN <span id="vinTxt">${e(v.vin)}</span></div><p class="actions"><button class="btn small ghost" data-act="copy" data-src="#vinTxt">Копіювати VIN</button> <a class="btn small ghost" href="#/nalashtuvannia">Змінити дані авто</a></p>` : `<p class="actions"><a class="btn small ghost" href="#/nalashtuvannia">Заповнити дані авто</a></p>`}
+      </section>
+      <div class="list">
+        ${link('#/maistru', 'Список для майстра', 'Що зробити і перевірити — щоб показати чи надіслати на СТО')}
+        ${link('#/zapchasty', 'Мої запчастини', 'Номери оригіналу й аналогів, що стоїть зараз, пошук у магазинах')}
+        ${link('#/shyny', 'Шини', 'Комплекти, що стоїть зараз, сезонні заміни, вік і протектор')}
+        ${link('#/reglament', 'Регламент', 'Пункти обслуговування та інтервали — можна правити')}
+        ${link('#/probih', 'Пробіг', 'Усі покази одометра')}
+        ${link('#/notes', 'Нотатки' + (n ? ` (${n})` : ''), 'Відкриті питання, поради механіків')}
       </div>`,
     };
   }
@@ -525,5 +540,5 @@ const V = (() => {
       <label class="btn small ghost">З галереї<input type="file" accept="image/*" multiple data-ocr hidden></label>`;
   }
 
-  return { stan, rule, zhurnal, docs, doc, vytraty, sche, maistru, perevirka, reglament, notes, probih, obmin, nalashtuvannia, notFound, remText, intervalText, mainText, ocrButtons };
+  return { stan, rule, zhurnal, docs, doc, vytraty, sche, avto, maistru, perevirka, reglament, notes, probih, obmin, nalashtuvannia, notFound, remText, intervalText, mainText, ocrButtons };
 })();

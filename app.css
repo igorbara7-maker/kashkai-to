@@ -44,7 +44,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  padding-bottom: calc(var(--tabs-h) + 92px + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--tabs-h) + 24px + env(safe-area-inset-bottom));
 }
 a { color: var(--accent); }
 h2 { font-size: 1.2rem; margin: 0 0 .6rem; }
@@ -91,14 +91,26 @@ main { max-width: 760px; margin: 0 auto; padding: 12px 16px; }
 .tabs a svg { width: 24px; height: 24px; }
 .tabs a.on { color: var(--accent); font-weight: 700; }
 
-.fab {
-  position: fixed; right: 18px; z-index: 21;
-  bottom: calc(var(--tabs-h) + 16px + env(safe-area-inset-bottom));
-  width: 58px; height: 58px; border-radius: 50%; border: 0;
-  background: var(--accent); color: var(--accent-text);
-  box-shadow: 0 4px 14px rgba(0,0,0,.25); cursor: pointer;
+.tabs button.tab-add {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px;
+  background: none; border: 0; padding: 0; font: inherit; font-size: .74rem; font-weight: 700; color: var(--accent); cursor: pointer;
 }
-.fab svg { width: 28px; height: 28px; }
+.tab-add-c {
+  width: 54px; height: 54px; margin-top: -18px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--accent-text);
+  box-shadow: 0 3px 10px rgba(0,0,0,.28); border: 3px solid var(--panel);
+}
+.tab-add-c svg { width: 28px; height: 28px; }
+.top-gear { color: inherit; width: 40px; height: 40px; padding: 8px; margin-right: -6px; }
+.top-gear svg { width: 24px; height: 24px; }
+.seg { display: flex; gap: 0; margin: 0 0 12px; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--panel); }
+.seg a { flex: 1; text-align: center; padding: 8px 4px; text-decoration: none; color: var(--muted); font-weight: 600; font-size: .92rem; }
+.seg a.on { background: var(--accent); color: var(--accent-text); }
+.add-big { display: block; text-align: center; padding: 20px 12px; margin: 4px 0 10px; border-radius: var(--radius); background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: 1.1rem; cursor: pointer; }
+.add-big .sub { color: inherit; opacity: .85; font-weight: 400; font-size: .86rem; }
+.add-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+.add-grid a { display: block; text-align: center; padding: 14px 4px; border: 1px solid var(--line); border-radius: 12px; text-decoration: none; color: var(--text); font-weight: 600; font-size: .92rem; background: var(--panel); }
 
 /* ---- блоки ---- */
 .panel {
@@ -257,7 +269,7 @@ pre.pre { white-space: pre-wrap; font: inherit; margin: 0; }
 .sheet.full .sheet-box { top: 0; max-height: none; border-radius: 0; }
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%); z-index: 50;
-  bottom: calc(var(--tabs-h) + 90px + env(safe-area-inset-bottom));
+  bottom: calc(var(--tabs-h) + 24px + env(safe-area-inset-bottom));
   background: #263238; color: #fff; padding: 10px 16px; border-radius: 10px; max-width: calc(100vw - 32px);
   box-shadow: 0 4px 14px rgba(0,0,0,.3); font-size: .95rem;
 }

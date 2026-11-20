@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.15.0';
+  const VERSION = '0.16.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -14,8 +14,12 @@ const App = (() => {
     return { parts: path.split('/').map(decodeURIComponent), q: new URLSearchParams(i < 0 ? '' : h.slice(i + 1)) };
   }
 
-  const TAB_OF = { '': 'stan', stan: 'stan', rule: 'stan', zhurnal: 'zhurnal', docs: 'docs', doc: 'docs', vytraty: 'vytraty', palne: 'vytraty', dribni: 'vytraty', foto: 'docs', share: 'docs' };
-  const TAB_OF_EDIT = { work: 'zhurnal', visit: 'zhurnal', doc: 'docs', odo: 'stan', fuel: 'vytraty', expense: 'vytraty' };
+  // Яка вкладка внизу світиться на якому екрані. Шестерня (#/sche, обмін, Excel, налаштування) — частина Головної.
+  const TAB_OF = { '': 'stan', stan: 'stan', rule: 'stan', sche: 'stan', obmin: 'stan', excel: 'stan', perevirka: 'stan', nalashtuvannia: 'stan',
+    zhurnal: 'hist', docs: 'hist', doc: 'hist', foto: 'hist', share: 'hist', probih: 'hist', notes: 'hist',
+    vytraty: 'vytraty', palne: 'vytraty', dribni: 'vytraty', poizdky: 'vytraty', poizdka: 'vytraty',
+    avto: 'avto', zapchasty: 'avto', shyny: 'avto', reglament: 'avto', maistru: 'avto' };
+  const TAB_OF_EDIT = { work: 'hist', visit: 'hist', doc: 'hist', odo: 'hist', note: 'hist', fuel: 'vytraty', expense: 'vytraty', trip: 'vytraty', tireevent: 'avto', rule: 'avto' };
 
   function route() {
     const { parts, q } = parse();
@@ -30,6 +34,7 @@ const App = (() => {
         case 'doc': r = V.doc(b); break;
         case 'vytraty': r = V.vytraty(); break;
         case 'sche': r = V.sche(); break;
+        case 'avto': r = V.avto(); break;
         case 'maistru': r = V.maistru(); break;
         case 'perevirka': r = V.perevirka(); break;
         case 'reglament': r = V.reglament(); break;
@@ -53,7 +58,7 @@ const App = (() => {
       console.error(err);
       r = { title: 'Помилка', back: true, html: `<section class="panel"><p class="err">Сталася помилка: ${U.esc(err.message)}</p></section>` };
     }
-    const tab = a === 'edit' ? (TAB_OF_EDIT[b] || 'sche') : (TAB_OF[a] || 'sche');
+    const tab = a === 'edit' ? (TAB_OF_EDIT[b] || 'stan') : (TAB_OF[a] || 'stan');
     render(r, tab);
     if (waiting) applyUpdate();
     Obmin.autoSoon();
@@ -67,7 +72,8 @@ const App = (() => {
     photoUrls.forEach(u => URL.revokeObjectURL(u)); photoUrls = [];
     $('view').innerHTML = r.html;
     document.querySelectorAll('#tabs a').forEach(x => x.classList.toggle('on', x.dataset.tab === tab));
-    $('fab').hidden = !!r.form;
+    $('fab').style.visibility = r.form ? 'hidden' : '';
+    $('topGear').hidden = !(tab === 'stan' && (parse().parts[0] === '' || parse().parts[0] === 'stan'));
     const ctx = M.context();
     $('topKm').textContent = ctx.nowKm != null && !r.noTopKm ? U.km(ctx.nowKm, ctx.nowEst) : '';
     window.scrollTo(0, scrollPos.get(location.hash) || 0);
@@ -95,18 +101,17 @@ const App = (() => {
   }
   function openFab() {
     const tr = Trip.ongoing();
-    openSheet(`
+    const tile = (h, t) => `<a href="${h}">${t}</a>`;
+    openSheet(`<h3>Додати</h3>
       ${tr ? `<a class="item" href="#/poizdka/${U.esc(tr.id)}"><b>Поїздка «${U.esc(tr.name)}»</b><div class="sub">Підсумок, завершити поїздку</div></a>` : ''}
-      <a class="item" href="#/edit/visit/new"><b>Записати ТО / роботу</b><div class="sub">Що зроблено, по вузлах</div></a>
-      <div class="item"><b>Документ з фото</b><div class="sub">Програма прочитає дату, суму, позиції — ви перевірите</div>
-        <div class="actions">${V.ocrButtons()}</div></div>
-      <a class="item" href="#/edit/doc/new"><b>Новий документ / чек вручну</b><div class="sub">Акт, накладна, чек — з позиціями і фото</div></a>
-      <a class="item" href="#/edit/fuel/new"><b>Заправка</b><div class="sub">Літри, сума, пробіг — для витрати пального</div></a>
-      <a class="item" href="#/edit/expense/new"><b>Витрата на авто</b><div class="sub">Мийка, стоянка, платна дорога, доливання</div></a>
-      <a class="item" href="#/edit/odo/new"><b>Записати пробіг</b><div class="sub">Показ одометра</div></a>
-      <a class="item" href="#/edit/tireevent/new"><b>Шини</b><div class="sub">Сезонна заміна, огляд, ремонт</div></a>
-      <a class="item" href="#/edit/note/new"><b>Нотатка</b><div class="sub">Порада механіка, нагадування</div></a>
-      ${tr ? '' : '<a class="item" href="#/edit/trip/new"><b>Почати поїздку</b><div class="sub">Пальне і витрати на машину в дорозі — з підсумком</div></a>'}
+      <label class="add-big">Сфотографувати<div class="sub">чек, акт чи накладну — програма прочитає, ви перевірите</div>
+        <input type="file" accept="image/*" capture="environment" data-ocr hidden></label>
+      <label class="btn ghost wide">Вибрати з галереї<input type="file" accept="image/*" multiple data-ocr hidden></label>
+      <div class="add-grid">
+        ${tile('#/edit/fuel/new', 'Заправка')}${tile('#/edit/odo/new', 'Пробіг')}${tile('#/edit/visit/new', 'ТО')}
+        ${tile('#/edit/expense/new', 'Витрата')}${tile('#/edit/tireevent/new', 'Шини')}${tr ? tile('#/poizdka/' + U.esc(tr.id), 'Поїздка') : tile('#/edit/trip/new', 'Поїздка')}
+        ${tile('#/edit/note/new', 'Нотатка')}${tile('#/edit/doc/new', 'Документ вручну')}
+      </div>
       <button class="btn ghost wide" data-act="sheet-close">Закрити</button>`);
   }
 
@@ -443,6 +448,12 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.16.0': [
+      'Нова нижня панель: Головна · Історія · «Додати» · Витрати · Авто. Кругла кнопка «Додати» посередині замінила плаваючий «+».',
+      'Журнал і Документи тепер в «Історії» (угорі перемикач «Роботи / Документи»). Пальне, поїздки й дрібні витрати — у «Витратах».',
+      '«Ще» зникло: обмін даними, Excel, перевірка даних і налаштування — під шестернею на Головній. Запчастини, шини, регламент і список для майстра — у «Авто».',
+      'Дані не змінилися — лише розташування. Старі закладки працюють.',
+    ],
     '0.15.0': [
       'Новий розділ «Мої запчастини» (Ще → «Мої запчастини»): свій короткий список під ваш автомобіль — номер оригіналу, аналоги, що стоїть зараз, нотатка «ставив / не брати».',
       'Кнопка «Заповнити з актів СТО» додає номери, що справді стояли у ваших актах (олива, фільтри, свічки, рідини, колодки…). Чого в актах не було — порожній рядок «знайти за VIN».',
