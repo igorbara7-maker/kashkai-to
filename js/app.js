@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.5.0';
+  const VERSION = '0.6.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -46,6 +46,7 @@ const App = (() => {
     }
     const tab = a === 'edit' ? (TAB_OF_EDIT[b] || 'sche') : (TAB_OF[a] || 'sche');
     render(r, tab);
+    if (waiting) applyUpdate();
   }
 
   function render(r, tab) {
@@ -191,7 +192,7 @@ const App = (() => {
         showPhotos(el.dataset.doc);
         break;
       }
-      case 'update': if (App._waiting) App._waiting.postMessage('skipWaiting'); break;
+      case 'update': applyUpdate(true); break;
     }
   });
 
@@ -244,24 +245,70 @@ const App = (() => {
   });
 
   // ---------- оновлення програми ----------
+  // Нова версія ставиться сама, щойно це безпечно: не відкрита форма, не йде обмін чи запис таблиці.
+  // Інакше — смужка, і оновлення відбудеться після закриття форми.
+  let waiting = null, reg = null, lastCheck = Date.now();
+  const safeNow = () => !busy && !document.querySelector('form[data-form]') && $('sheet').classList.contains('hidden')
+    && !Obmin.isBusy() && !Excel.isBusy();
+  function applyUpdate(force) {
+    if (!waiting || !(force || safeNow())) return false;
+    waiting.postMessage('skipWaiting');
+    waiting = null;
+    return true;
+  }
   function serviceWorker() {
     if (!('serviceWorker' in navigator)) return;
     if (location.protocol !== 'https:' && !/[?&]sw\b/.test(location.search)) return;
-    const ask = w => {
-      App._waiting = w;
+    const found = w => {
+      waiting = w;
+      if (applyUpdate()) return;
       const b = $('banner');
-      b.innerHTML = 'Є нова версія програми. <button class="btn small" data-act="update">Оновити</button>';
+      b.innerHTML = 'Є нова версія програми — встановиться сама, щойно закриєте форму. <button class="btn small" data-act="update">Зараз</button>';
       b.hidden = false;
     };
-    navigator.serviceWorker.register('sw.js').then(reg => {
-      if (reg.waiting && navigator.serviceWorker.controller) ask(reg.waiting);
-      reg.addEventListener('updatefound', () => {
-        const w = reg.installing;
-        if (w) w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) ask(w); });
+    navigator.serviceWorker.register('sw.js').then(r => {
+      reg = r;
+      if (r.waiting && navigator.serviceWorker.controller) found(r.waiting);
+      r.addEventListener('updatefound', () => {
+        const w = r.installing;
+        if (w) w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) found(w); });
       });
     }).catch(err => console.warn('Не вдалося підключити роботу без інтернету', err));
     let reloading = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloading) { reloading = true; location.reload(); } });
+    // Встановлена програма може тижнями лишатися відкритою у фоні — перевіряємо оновлення, коли до неї повертаються.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') { applyUpdate(); return; }
+      if (reg && Date.now() - lastCheck > 3600e3) { lastCheck = Date.now(); reg.update().catch(() => { }); }
+    });
+  }
+
+  // «Що нового» — показуємо один раз після оновлення.
+  const NEWS = {
+    '0.6.0': [
+      'Програма оновлюється сама — кнопку «Оновити» натискати не треба.',
+      'Витрати: пробіг за рік рахується на 31 грудня (між показами — оцінка). Виправлено 2019 і 2020 роки; роки без документів теж видно.',
+      'Якщо пробіг неправдоподібно великий (помилка в цифрах, чужий документ) — програма перепитає.',
+      'Документ → журнал: на сторінці документа кнопка «Позначити виконане» — вузли відмічені за позиціями, дата й пробіг заповнені.',
+    ],
+  };
+  function showNews() {
+    let seen = DB.getMeta('seenVersion');
+    if (seen === VERSION) return;
+    DB.setMeta('seenVersion', VERSION);
+    // До 0.6.0 версію не запам'ятовували: якщо дані вже є — це оновлення з 0.5.x, інакше перший запуск.
+    if (!seen) { if (!DB.allRecords().length) return; seen = '0.5.9'; }
+    const items = Object.keys(NEWS).filter(v => newer(v, seen) > 0 && newer(v, VERSION) <= 0).sort(newer).flatMap(v => NEWS[v]);
+    if (!items.length) return;
+    openSheet(`<h3>Програму оновлено до версії ${U.esc(VERSION)}</h3>
+      <ul class="news">${items.map(t => `<li>${U.esc(t)}</li>`).join('')}</ul>
+      <button class="btn wide" data-act="sheet-close">Гаразд</button>`);
+  }
+  // Чи версія a новіша за b («0.10.0» новіша за «0.9.1»).
+  function newer(a, b) {
+    const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+    for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0) ? 1 : -1;
+    return 0;
   }
 
   async function init() {
@@ -278,6 +325,7 @@ const App = (() => {
       route();
     });
     route();
+    showNews();
     serviceWorker();
     DB.persist();
   }

@@ -207,6 +207,11 @@ const V = (() => {
         <dl class="kv">${kv}</dl>
         <p class="actions"><a class="btn" href="#/edit/doc/${e(id)}">Змінити</a></p>
       </section>
+      ${!ws.length && !/калькуляц|рахунок/i.test(d.kind || '') ? `<section class="panel note-box">
+        <b>Позначте виконане в журналі</b>
+        <p class="small">Поки цього не зроблено, стан вузлів на головному екрані не зміниться. Вузли програма відмітить сама за позиціями документа — вам лишиться перевірити.</p>
+        <p class="actions"><a class="btn" href="#/edit/visit/new?doc=${e(id)}">Позначити виконане</a></p>
+      </section>` : ''}
       <section class="panel">
         <div class="row"><h3 class="grow">Фото</h3>
           <label class="btn small">Камера<input type="file" accept="image/*" capture="environment" data-photo="${e(id)}" hidden></label>
@@ -220,7 +225,8 @@ const V = (() => {
         ${itemsHtml || '<p class="muted">Позицій не внесено.</p>'}
         ${coefNote}
       </section>
-      ${ws.length ? `<h3 class="sec">У журналі (${ws.length})</h3><div class="list">${wsHtml}</div>` : ''}`,
+      ${ws.length ? `<h3 class="sec">У журналі (${ws.length})</h3><div class="list">${wsHtml}</div>
+        <p class="actions"><a class="btn small ghost" href="#/edit/visit/new?doc=${e(id)}">Додати ще виконане</a></p>` : ''}`,
       after: () => App.showPhotos(id),
     };
   }
@@ -237,17 +243,30 @@ const V = (() => {
       return ent.map(([c, s]) => `<div class="bar-row"><div class="row"><span class="grow">${e(c)}</span><b>${U.money0(s)}</b></div>
         <div class="bar"><i style="width:${Math.max(1, s / mx * 100).toFixed(1)}%"></i></div></div>`).join('');
     };
-    const years = ys.map(y => `
+    const kmLine = y => {
+      if (!y.km) return '';
+      const per = y.total ? ' · ' + U.money0(y.total / y.km * 1000) + ' на 1000 км' : '';
+      const part = y.kmFirst ? ' (неповний рік: облік з ' + U.date(y.kmFrom) + (y.kmNow ? ' по сьогодні' : '') + ')'
+        : y.kmNow ? ' (рік ще триває)' : '';
+      return '<div class="sub">Пробіг за рік ' + U.km(y.km, y.kmEst) + part + per + '</div>';
+    };
+    const years = ys.map(y => y.count ? `
       <details class="panel">
         <summary><div class="row"><b class="grow">${y.year}</b><b>${U.money0(y.total)}</b></div>
-          <div class="sub">${y.count} ${U.plural(y.count, 'документ', 'документи', 'документів')}${y.km ? ' · пробіг за рік ≈ ' + U.km(y.km) + ' · ' + U.money0(y.total / y.km * 1000) + ' на 1000 км' : ''}</div></summary>
+          <div class="sub">${y.count} ${U.plural(y.count, 'документ', 'документи', 'документів')}</div>${kmLine(y)}</summary>
         ${bars(y.cats)}
-      </details>`).join('');
+      </details>` : `
+      <section class="panel">
+        <div class="row"><b class="grow">${y.year}</b><span class="muted">0 грн</span></div>
+        <div class="sub muted">Документів за цей рік немає — якщо витрати були, додайте документи.</div>${kmLine(y)}
+      </section>`).join('');
+    const tk = M.totalKm();
     return {
       title: 'Витрати', html: `
       <section class="panel">
         <div class="big">${U.money0(all)}</div>
         <div class="muted">усього за документами, позначеними «у витратах»</div>
+        ${tk && all ? `<div class="sub">За весь час обліку (з ${U.date(tk.from)}, ${U.km(tk.km, true)}): ${U.money0(all / tk.km * 1000)} на 1000 км</div>` : ''}
       </section>
       ${years || '<p class="muted">Витрат ще немає.</p>'}
       ${ys.length ? `<details class="panel"><summary><b>За всі роки — за категоріями</b></summary>${bars(allCats)}</details>` : ''}`,

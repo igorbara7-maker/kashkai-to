@@ -289,7 +289,7 @@ const Obmin = (() => {
     if (out0) out0.innerHTML = '<p class="muted">Читаю файл…</p>';
     try {
       const r = await readCopy(file, (i, n) => { const o = $('importRes'); if (o && n > 3) o.innerHTML = `<p class="muted">Читаю фото… ${i} з ${n}</p>`; });
-      const parts = [`нових записів: ${r.added}`, `оновлено: ${r.updated}`];
+      const parts = [`Нових записів: ${r.added}`, `оновлено: ${r.updated}`];
       if (r.deleted) parts.push(`видалено: ${r.deleted}`);
       if (r.photos) parts.push(`фото: ${r.photos}`);
       if (r.photosDel) parts.push(`видалено фото: ${r.photosDel}`);
@@ -366,6 +366,6 @@ const Obmin = (() => {
 
   return {
     screen, make, share, save, rename, importFile, readCopy, build, select,
-    fillFolder, importFromFolder, chooseFolder, forgetFolder,
+    fillFolder, importFromFolder, chooseFolder, forgetFolder, isBusy: () => busy,
   };
 })();

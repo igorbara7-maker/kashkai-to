@@ -52,9 +52,22 @@ const F = (() => {
     let before = null, after = null;
     for (const p of pts) { if (p.date < date) before = p; else if (p.date > date && !after) after = p; }
     const bad = (before && km < before.km) || (after && km > after.km);
-    if (!bad) return true;
-    const ctx = [before ? U.date(before.date) + ' — ' + U.km(before.km) : '', after ? U.date(after.date) + ' — ' + U.km(after.km) : ''].filter(Boolean).join('; ');
-    return confirm('Пробіг ' + U.km(km) + ' на ' + U.date(date) + ' не узгоджується з іншими показами (' + ctx + '). Зберегти все одно?');
+    if (bad) {
+      const ctx = [before ? U.date(before.date) + ' — ' + U.km(before.km) : '', after ? U.date(after.date) + ' — ' + U.km(after.km) : ''].filter(Boolean).join('; ');
+      return confirm('Пробіг ' + U.km(km) + ' на ' + U.date(date) + ' не узгоджується з іншими показами (' + ctx + '). Зберегти все одно?');
+    }
+    // Новіший за всі покази, але неправдоподібно великий (помилка в цифрах, чужий документ).
+    const prev = pts.filter(p => p.date <= date).pop();
+    if (prev && !after) {
+      const r = M.rate(pts) || 40, d = U.days(prev.date, date);
+      const exp = Math.round(prev.km + r * d), allow = Math.max(3000, r * Math.max(1, d) * 2.5);
+      if (km - exp > allow) {
+        const why = d > 0 ? 'за очікуваний (' + U.km(exp, true) + '; останній показ ' + U.km(prev.km) + ' на ' + U.date(prev.date) + ')'
+          : 'за інший показ того ж дня (' + U.km(prev.km) + ')';
+        return confirm('Пробіг ' + U.km(km) + ' на ' + U.date(date) + ' набагато більший ' + why + '. Можливо, помилка в цифрах. Зберегти все одно?');
+      }
+    }
+    return true;
   }
 
   const DEFS = {
@@ -147,17 +160,33 @@ const F = (() => {
   // ---------- кілька робіт за один візит ----------
   function visit(q) {
     const pre = q.get('rule');
+    const d = q.get('doc') ? DB.get(q.get('doc')) : null;
     const today = U.today();
-    const est = M.kmAt(today);
+    const date = d && d.date ? d.date : today;
+    const est = M.kmAt(date);
     const rules = M.rules();
-    const preGroup = rules.some(r => r.id === pre && r.group);
-    const node = r => `<div class="node"><label class="check"><input type="checkbox" name="r" value="${e(r.id)}"${r.id === pre ? ' checked' : ''}> ${e(r.name)}</label>
+    // З документа: вузли відмічаємо за позиціями, крім уже записаних у журнал за цим документом.
+    const sug = d ? M.docRules(d) : new Set();
+    const done = d ? M.works().filter(w => w.doc === d.id) : [];
+    const doneIds = new Set(done.map(w => w.rule));
+    const on = r => r.id === pre || (sug.has(r.id) && !doneIds.has(r.id));
+    const preGroup = rules.some(r => r.group && on(r));
+    const node = r => `<div class="node${sug.has(r.id) && on(r) ? ' auto' : ''}"><label class="check"><input type="checkbox" name="r" value="${e(r.id)}"${on(r) ? ' checked' : ''}> ${e(r.name)}</label>
       <input type="text" name="w_${e(r.id)}" class="what" autocomplete="off" value="${e(r.action && !r.group ? r.action : '')}" placeholder="Що зроблено"></div>`;
+    let head = '';
+    if (d) {
+      const n = rules.filter(r => sug.has(r.id) && on(r)).length;
+      const names = rules.filter(r => doneIds.has(r.id)).map(r => r.name);
+      head = `<section class="panel note-box"><b>За документом ${e(d.code || '')} від ${U.date(d.date)}</b>
+        <p class="small">${n ? `Програма відмітила вузли за позиціями документа (${n}) — вони з жовтим тлом. Перевірте, зніміть зайве чи додайте пропущене й натисніть «Зберегти».`
+          : 'За позиціями документа вузлів не знайдено — позначте виконане вручну.'}</p>
+        ${names.length ? `<p class="small muted">Уже записано в журналі за цим документом: ${e(names.join(', '))} — їх не відмічено.</p>` : ''}</section>`;
+    }
     return {
-      title: 'Записати роботу', back: true, form: true, html: `
+      title: 'Записати роботу', back: true, form: true, html: head + `
       <form class="panel form" data-form="visit">
-        ${field({ k: 'date', label: 'Дата', type: 'date', req: true }, today)}
-        ${field({ k: 'km', label: 'Пробіг, км', type: 'number', mode: 'numeric', hint: est ? 'сьогодні орієнтовно ' + U.int(est.km) : '' }, null)}
+        ${field({ k: 'date', label: 'Дата', type: 'date', req: true }, date)}
+        ${field({ k: 'km', label: 'Пробіг, км', type: 'number', mode: 'numeric', hint: d && d.km != null ? 'з документа' : est ? (date === today ? 'сьогодні' : 'на цю дату') + ' орієнтовно ' + U.int(est.km) : '' }, d ? d.km : null)}
         ${field({ k: 'doc', label: 'Документ', type: 'select', opts: docOpts() }, q.get('doc') || '')}
         <div class="fld"><span>Що зроблено — позначте вузли</span></div>
         <div class="nodes">${rules.filter(r => !r.group).map(node).join('')}</div>
@@ -174,10 +203,12 @@ const F = (() => {
     const ids = fd.getAll('r');
     if (!ids.length) { U.toast('Позначте хоча б один вузол'); return false; }
     const date = fd.get('date'), km = U.num(fd.get('km'));
-    if (!kmOk(date, km)) return false;
     const doc = fd.get('doc') || null;
     const parts = (fd.get('parts') || '').trim() || null, note = (fd.get('note') || '').trim() || null;
-    const recs = ids.map(rid => ({ t: 'work', date, km, rule: rid, what: (fd.get('w_' + rid) || '').trim() || null, parts, doc, note }));
+    const dd = doc ? DB.get(doc) : null;
+    const kmEst = !!(dd && dd.kmEst && km != null && km === dd.km); // пробіг узято з документа, де він лише оцінка
+    if (!kmEst && !kmOk(date, km)) return false;
+    const recs = ids.map(rid => Object.assign({ t: 'work', date, km, rule: rid, what: (fd.get('w_' + rid) || '').trim() || null, parts, doc, note }, kmEst ? { kmEst } : {}));
     await DB.saveAll(recs);
     U.toast('Записано: ' + recs.length);
     return true;

@@ -243,9 +243,13 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
       [{ v: 'Витрати на обслуговування', s: S.title }],
       [{ v: 'Лише документи з позначкою «у витратах». Позиції перераховано з поправкою на знижку чи ПДВ, щоб разом вийшла сума документа.', s: S.note }],
       [],
-      head(['Рік', 'Сума, грн', 'Документів', 'Пробіг за рік, км', 'Грн на 1000 км']),
+      head(['Рік', 'Сума, грн', 'Документів', 'Пробіг за рік, км', 'Грн на 1000 км', 'Примітка']),
     ];
-    for (const y of ys) rows.push([y.year, Mo(y.total), y.count, K(y.km), Mo(y.km ? y.total / y.km * 1000 : null)]);
+    for (const y of ys) {
+      const note = [y.kmEst ? 'пробіг — оцінка між показами' : '', y.kmFirst ? 'неповний рік: облік з ' + U.date(y.kmFrom) : y.kmNow ? 'рік ще триває' : '',
+        y.count ? '' : 'документів немає'].filter(Boolean).join('; ');
+      rows.push([y.year, Mo(y.total), y.count, K(y.km), Mo(y.km && y.total ? y.total / y.km * 1000 : null), note || null]);
+    }
     const all = ys.reduce((a, y) => a + y.total, 0), cnt = ys.reduce((a, y) => a + y.count, 0);
     rows.push([{ v: 'Разом', s: S.bold }, { v: Math.round(all * 100) / 100, s: S.moneyBold }, { v: cnt, s: S.bold }]);
     rows.push([], [{ v: 'За категоріями', s: S.bold }]);
@@ -331,5 +335,5 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
     };
   }
 
-  return { screen, save, build, write, S };
+  return { screen, save, build, write, S, isBusy: () => busy };
 })();

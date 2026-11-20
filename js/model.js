@@ -143,13 +143,116 @@ const M = (() => {
         }
       } else if (total) Y.cats['Без розкладу на позиції'] = (Y.cats['Без розкладу на позиції'] || 0) + total;
     }
-    // Пробіг за рік: останній показ року мінус останній показ попереднього.
-    const endKm = y => { let k = null; for (const p of pts) if (+p.date.slice(0, 4) <= y) k = p.km; return k; };
-    for (const Y of years.values()) {
-      const a = endKm(Y.year - 1), b = endKm(Y.year);
-      if (a != null && b != null && b > a) Y.km = b - a;
+    // Роки без жодного документа теж показуємо — щоб прогалину було видно.
+    const today = U.today(), thisYear = +today.slice(0, 4);
+    if (years.size) {
+      const first = Math.min(...years.keys());
+      for (let y = first; y <= thisYear; y++) if (!years.has(y)) years.set(y, { year: y, total: 0, count: 0, cats: {} });
     }
+    for (const Y of years.values()) Object.assign(Y, yearKm(Y.year, pts, today) || {});
     return [...years.values()].sort((a, b) => b.year - a.year);
+  }
+
+  // Пробіг за рік: пробіг на 31 грудня мінус пробіг на 31 грудня попереднього року
+  // (між показами — оцінка). Перший рік рахуємо від першого показу, поточний — по сьогодні.
+  function yearKm(y, pts = points(), today = U.today()) {
+    if (!pts.length) return null;
+    let from = (y - 1) + '-12-31', to = y + '-12-31', kmFirst = false, kmNow = false;
+    if (pts[0].date > from) { from = pts[0].date; kmFirst = true; }
+    if (to > today) { to = today; kmNow = true; }
+    if (to <= from) return null;
+    const a = kmAt(from, pts), b = kmAt(to, pts);
+    if (!a || !b || b.km <= a.km) return null;
+    return { km: b.km - a.km, kmEst: a.est || b.est, kmFirst, kmNow, kmFrom: from };
+  }
+
+  // Пробіг за весь час обліку: від першого показу до сьогодні.
+  function totalKm(ctx = context()) {
+    if (!ctx.pts.length || ctx.nowKm == null) return null;
+    const km = ctx.nowKm - ctx.pts[0].km;
+    return km > 0 ? { km, from: ctx.pts[0].date } : null;
+  }
+
+  // ---- документ → журнал: які вузли зачіпає документ ----
+  // Ключ → як упізнати вузол у регламенті за назвою (вузли власник може перейменувати — тоді просто не відмітиться).
+  const NODE_RE = {
+    oil: /олива двигуна|моторн\S* олив/i, air: /повітрян\S* фільтр|фільтр повітр/i, cabin: /фільтр салону|салонн\S* фільтр/i,
+    plugs: /свічк/i, brakefluid: /гальмівн\S* рідин/i, coolant: /антифриз|охолоджувальн\S* рідин/i,
+    belt: /ремінь|ремені/i, rollers: /ролик/i, chain: /ланцюг/i, mkpp: /мкпп|кпп|коробк/i,
+    brakes: /^гальма/i, chassis: /^ходова/i, align: /розвал|сходжен/i, cooling: /система охолодж/i,
+    fuel: /паливн/i, locks: /замки|петлі/i, padsF: /колодки.*передн/i, padsR: /колодки.*задн/i,
+    battery: /акумулятор/i, ac: /кондиціонер/i, wipers: /склоочис|двірник/i, tires: /^шини/i,
+    gEngine: /ремонт:?\s*двигун/i, gChassis: /ремонт:?\s*ходов/i, gElec: /ремонт:?\s*електр/i,
+    gBody: /^кузов/i, gAcc: /аксесуар/i, gWarranty: /гарантійн/i, gDiag: /^діагностик/i,
+  };
+  const BY_CAT = {
+    'Олива двигуна і фільтр': 'oil', 'Свічки запалювання': 'plugs', 'Антифриз': 'coolant', 'Олива МКПП': 'mkpp',
+    'Акумулятор': 'battery', 'Кондиціонер': 'ac', 'Склоочисники': 'wipers', 'Шини і диски': 'tires',
+    'Ремонт двигуна': 'gEngine', 'Електрика': 'gElec', 'Кузов (ДТП)': 'gBody',
+    'Аксесуари, доп. обладнання': 'gAcc', 'Гарантійна кампанія': 'gWarranty',
+  };
+  function itemKeys(it) {
+    const n = (it.name || '').toLowerCase(), cat = it.cat || '';
+    const k = new Set();
+    const check = /^\s*(\[[^\]]*\]\s*)?(перевір|провер|діагност|диагност|огляд|осмотр|контрол)/.test(n) && !/замін|замен|с\/у|зняття/.test(n);
+    // Огляди й перевірки — за словами в назві (заміна теж означає, що вузол оглянули).
+    if (/колодк|тормоз|гальм\S* (диск|шланг|трубк|трубопр|систем|механізм)|(диск|шланг|трубк)\S* гальм/.test(n) || (check && /гальм/.test(n))) k.add('brakes');
+    if (/ходов|підвіск|подвеск|шарнір|рульов|рулев|важел|амортиз|маточин|стабіліз|стабилиз|пильовик|пыльник|чохл/.test(n)) k.add('chassis');
+    if (/розвал|сходжен|схожден|балансув/.test(n)) k.add('align');
+    if (/охолод|радіатор|патрубк|антифриз/.test(n)) k.add('cooling');
+    if (/паливн|топливн|evap/.test(n)) k.add('fuel');
+    if (/замк|петел|петл/.test(n)) k.add('locks');
+    if (/акб|акумулятор|аккумулятор/.test(n)) k.add('battery');
+    if (/(^|[^а-яіїєґ])шин|шиномонт/.test(n)) k.add('tires');
+    if (/кпп|коробк\S* (змін|передач)|трансміс|трансмис/.test(n)) k.add('mkpp');
+    if (/діагност|диагност/.test(n) && cat === 'Діагностика, перевірки') k.add('gDiag');
+    if (check) return k;
+    // Заміни — за категорією позиції, а без категорії — за назвою.
+    const before = k.size;
+    if (BY_CAT[cat]) k.add(BY_CAT[cat]);
+    else if (cat === 'Фільтри повітря і салону') k.add(/салон|кондиці|кондици/.test(n) ? 'cabin' : 'air');
+    else if (cat === 'Ремінь і ролики приводу') k.add(/ролик/.test(n) ? 'rollers' : /ланцюг|грм/.test(n) ? 'chain' : 'belt');
+    else if (cat === 'Ходова і рульове' && !k.has('align')) k.add('gChassis');
+    if (cat === 'Гальмівна система' || !cat || k.size === before) {
+      if (/(олив|масл|олі|мастил)\S* .*(двиг|двс|двз|мотор)|мотор\S* олив|(фільтр|фильтр)\S* (олив|масл)|(оливн|масляний)\S* (фільтр|фильтр)/.test(n)) k.add('oil');
+      if (/фільтр|фильтр/.test(n) && /салон|кондиці|кондици/.test(n)) k.add('cabin');
+      else if (/фільтр|фильтр/.test(n) && /повітр|воздуш/.test(n)) k.add('air');
+      if (/свіч|свеч/.test(n)) k.add('plugs');
+      if (/гальмівн\S* рідин|рідин\S* гальм|тормозн\S* жидк/.test(n)) k.add('brakefluid');
+      if (/антифриз|охолоджу\S* рідин|тосол/.test(n)) k.add('coolant');
+      if (/колодк/.test(n) && /передн|переднего/.test(n)) k.add('padsF');
+      if (/колодк/.test(n) && /задн/.test(n)) k.add('padsR');
+      if (/щітк\S* склоочис|склоочис|двірник|дворник/.test(n)) k.add('wipers');
+      if (/ролик/.test(n)) k.add('rollers');
+      else if (/ремін|ремен/.test(n)) k.add('belt');
+    }
+    return k;
+  }
+  // Пункти регламенту, які, найімовірніше, виконано за документом.
+  // Літрів у позиції: «Охолоджуюча рідина, 5Л» × 0,3 шт = 1,5 л.
+  function litres(it) {
+    const m = /(\d+(?:[.,]\d+)?)\s*(л(?:ітр|итр)?[а-яіїєґ]*|l)(?![а-яіїєґa-z])/i.exec(it.name || '');
+    const per = m ? +m[1].replace(',', '.') : null;
+    if (/^л/i.test(it.unit || '')) return it.qty ?? per ?? 0;
+    return per != null ? per * (it.qty ?? 1) : 0;
+  }
+  // Рідину замінено, якщо є робота «заміна» або куплено достатньо (інакше це доливання).
+  function replaced(items, re, min) {
+    const its = items.filter(i => re.test(i.name || ''));
+    return its.some(i => /замін|замен/i.test(i.name)) || its.reduce((s, i) => s + litres(i), 0) >= min;
+  }
+  function docRules(d) {
+    const keys = new Set(), items = d.items || [];
+    for (const it of items) itemKeys(it).forEach(x => keys.add(x));
+    if (keys.has('coolant') && !replaced(items, /охолод\S* рідин|антифриз|тосол/i, 4)) keys.delete('coolant');
+    if (keys.has('brakefluid') && !replaced(items, /(рідин|жидк)\S*.*(гальм|тормоз)|(гальм|тормоз)\S* (рідин|жидк)|dot\s*4/i, 0.8)) keys.delete('brakefluid');
+    const rs = rules(), out = new Set();
+    for (const key of keys) {
+      const g = key[0] === 'g';   // ключі розділів журналу (ремонти) починаються з «g»
+      const r = rs.find(r => !!r.group === g && NODE_RE[key].test(r.name));
+      if (r) out.add(r.id);
+    }
+    return out;
   }
 
   // Значення, що вже траплялися — для підказок під час введення.
@@ -166,6 +269,6 @@ const M = (() => {
 
   return {
     ST, CATS, DOC_KINDS, vehicle, rules, works, odos, docs, notes, points, current, rate, kmAt,
-    context, status, allStatus, docTotal, nextDocCode, expenses, used, usedCats,
+    context, status, allStatus, docTotal, nextDocCode, expenses, yearKm, totalKm, docRules, used, usedCats,
   };
 })();
