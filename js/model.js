@@ -302,6 +302,19 @@ const M = (() => {
     return out;
   }
 
+  // Орієнтовна ціна заміни вузла за останнім документом, де вона була (з урахуванням знижки документа).
+  function ruleCost(rule) {
+    const ws = works().filter(w => w.rule === rule.id && w.doc);
+    const d = ws.length ? DB.get(ws[ws.length - 1].doc) : null;
+    if (!d || !d.items || !d.items.length) return null;
+    const { coef } = docTotal(d);
+    let s = 0;
+    for (const it of d.items) {
+      if ([...itemKeys(it)].some(k => NODE_RE[k] && NODE_RE[k].test(rule.name))) s += (it.sum || 0) * coef;
+    }
+    return s > 0 ? Math.round(s / 10) * 10 : null;
+  }
+
   // Значення, що вже траплялися — для підказок під час введення.
   function used(t, field, extra = []) {
     const s = new Set(extra);
@@ -373,7 +386,7 @@ const M = (() => {
 
   return {
     ST, CATS, DOC_KINDS, vehicle, rules, works, odos, docs, fuels, notes, points, current, rate, kmAt,
-    context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, yearKm, totalKm, docRules, used, usedCats,
+    context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, yearKm, totalKm, docRules, ruleCost, used, usedCats,
     issues, checkList,
   };
 })();

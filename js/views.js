@@ -69,57 +69,88 @@ const V = (() => {
     const grp = { over: [], soon: [], nodata: [], later: [], ok: [] };
     list.forEach(o => grp[o.snoozed && /over|soon|nodata/.test(o.st) ? 'later' : o.st === 'state' ? 'ok' : o.st].push(o));
     if (tires) grp[tires.snoozed && tires.st !== 'ok' ? 'later' : tires.st].push({ tires });
-    // Висновок одним реченням.
-    const nm = o => o.tires ? 'Шини' : o.rule.name;
-    const names = arr => arr.slice(0, 3).map(o => nm(o).replace(/\s*\(.*\)$/, '')).join(', ') + (arr.length > 3 ? ' та ще ' + (arr.length - 3) : '');
+    // Візит на СТО: прострочене й близьке (без оглядів — вони окремо), шини — своєю карткою нижче.
+    const visit = [...grp.over, ...grp.soon].filter(o => !o.tires && !isCheckRule(o.rule));
+    const checks = [...grp.over, ...grp.soon, ...grp.nodata].filter(o => !o.tires && isCheckRule(o.rule));
+    const nVisitOver = visit.filter(o => o.st === 'over').length;
+    const plural = n => n === 1 ? 'робота' : n < 5 ? 'роботи' : 'робіт';
     const near = list.filter(o => o.st === 'ok' && o.remDays != null).sort((a, b) => a.remDays - b.remDays)[0];
-    let verdict;
-    if (grp.over.length) verdict = `<div class="verdict st-over">Прострочено: ${grp.over.length}</div><div class="sub">${e(names(grp.over))}</div>`;
-    else if (grp.soon.length) {
-      const s0 = grp.soon[0];
-      verdict = `<div class="verdict st-soon">Незабаром: ${e(nm(s0))}</div><div class="sub">${s0.tires ? e(s0.tires.main) : mainText(s0)}${grp.soon.length > 1 ? ' · і ще ' + (grp.soon.length - 1) : ''}</div>`;
+    let costSum = 0, costN = 0;
+    const vrow = o => {
+      const c = M.ruleCost(o.rule);
+      if (c) { costSum += c; costN++; }
+      return `<a class="vrow st-${o.st}" href="#/rule/${e(o.rule.id)}"><span class="grow"><b>${e(o.rule.name.replace(/\s*\(.*\)$/, ''))}</b>
+        <span class="sub">${mainText(o)}</span></span>${c ? `<span class="muted small">≈ ${U.int(c)} грн</span>` : ''}</a>`;
+    };
+    let visitCard;
+    if (visit.length) {
+      const rows = visit.map(vrow).join('');
+      const title = nVisitOver ? `${nVisitOver} ${plural(nVisitOver)} прострочено` : `Скоро: ${visit.length} ${plural(visit.length)}`;
+      visitCard = `<section class="panel visit edge st-${nVisitOver ? 'over' : 'soon'}">
+        <div class="verdict st-${nVisitOver ? 'over' : 'soon'}">${title}</div>
+        <div class="sub">Наступний візит на СТО</div>
+        <div class="vlist">${rows}</div>
+        ${costN ? `<div class="sub">Орієнтовно ≈ ${U.int(costSum)} грн${costN < visit.length ? ' (оцінено ' + costN + ' з ' + visit.length + ')' : ''} — за минулими чеками</div>` : ''}
+        <p class="actions"><a class="btn" href="#/maistru">Показати майстру</a></p>
+        <div class="small"><a href="#/edit/doc/new?ocr=1">Уже були на СТО? Сфотографуйте акт</a></div>
+      </section>`;
+    } else {
+      visitCard = `<section class="panel edge st-ok"><div class="verdict st-ok">Усе гаразд</div>
+        ${near ? `<div class="sub">Найближче: ${e(near.rule.name)} — ${mainText(near)}</div>` : ''}</section>`;
     }
-    else verdict = `<div class="verdict st-ok">Усе гаразд</div>${near ? `<div class="sub">Найближче: ${e(near.rule.name)} — ${mainText(near)}</div>` : ''}`;
-    // Новий місяць, а показу пробігу в ньому ще немає (одометр, заправка, ТО) — від пробігу залежать усі строки.
+    // Новий місяць, а показу пробігу в ньому ще немає — від пробігу залежать усі строки.
     const odoAge = cur ? U.days(cur.date, ctx.today) : null;
     const odoNote = cur && cur.date < ctx.today.slice(0, 8) + '01'
       ? `<div class="hint">Новий місяць — запишіть пробіг${odoAge > 30 ? ` (останній показ ${U.daysText(odoAge)} тому, строки рахуються за оцінкою)` : ''}. <a href="#/edit/odo/new">Записати</a></div>` : '';
-    // Давно не було резервної копії (автокопії в папку чи файлу для іншого пристрою), а зміни є.
     const lc = Obmin.lastCopy(), copyAge = lc ? Math.floor((Date.now() - lc.at) / 864e5) : 0;
     const copyNote = copyAge >= 7 && Obmin.unsaved()
       ? `<div class="hint">Резервної копії не було ${U.daysText(copyAge)}, а зміни є. <button type="button" class="linkbtn" data-act="backup-now">Зробити копію</button></div>` : '';
     const head = Trip.bar() + `
       <section class="panel">
-        ${verdict}
-        <div class="row km-row"><div class="grow">
+        <div class="row"><div class="grow">
           <div class="big">${U.km(ctx.nowKm, ctx.nowEst)}</div>
-          <div class="muted small">${cur ? 'Останній показ: ' + U.km(cur.km) + ' на ' + U.date(cur.date) : 'Пробіг ще не записано'}${ctx.r ? ' · ≈ ' + U.int(ctx.r * 365) + ' км на рік' : ''}</div>
+          <div class="muted small">${cur ? (ctx.nowEst ? 'Оцінка за темпом. ' : '') + 'Останній показ ' + U.km(cur.km) + ', ' + U.date(cur.date) + (odoAge ? ' (' + U.daysText(odoAge) + ' тому)' : '') : 'Пробіг ще не записано'}${ctx.r ? ' · ≈ ' + U.int(ctx.r * 365) + ' км на рік' : ''}</div>
         </div><a class="btn" href="#/edit/odo/new">Пробіг</a></div>
         ${odoNote}${Cloud.on() ? Cloud.note() : copyNote}
       </section>`;
+    // Тонкі рядки: пальне і витрати місяця.
+    const thin = [];
+    try {
+      const fs = M.fuels(), lastF = fs.length ? fs[fs.length - 1] : null;
+      const u = P.usage(U.addMonths(ctx.today, -12), ctx.today);
+      if (u && u.per100 && isFinite(u.per100)) {
+        thin.push('Пальне: ' + (Math.round(u.per100 * 10) / 10).toString().replace('.', ',') + ' л/100 км'
+          + (lastF && lastF.date ? ' · остання заправка ' + U.daysText(U.days(lastF.date, ctx.today)) + ' тому' : ''));
+      }
+    } catch (_) { /* немає даних про пальне */ }
+    try {
+      const ym = ctx.today.slice(0, 7);
+      let s = 0;
+      for (const f of M.fuels()) if ((f.date || '').startsWith(ym)) s += f.sum || 0;
+      for (const x of DB.list('expense')) if ((x.date || '').startsWith(ym)) s += x.sum || 0;
+      for (const d of M.docs()) if ((d.date || '').startsWith(ym)) s += M.docTotal(d).total || 0;
+      if (s > 0) thin.push('Цього місяця на авто: ' + U.int(Math.round(s)) + ' грн');
+    } catch (_) { /* немає даних про витрати */ }
+    const thinHtml = thin.length ? `<div class="thin">${thin.map(t => `<a href="#/vytraty">${e(t)}</a>`).join('')}</div>` : '';
+    const tiresCard = [...grp.over, ...grp.soon, ...grp.ok, ...grp.later].filter(o => o.tires).map(o => T.card(o.tires)).join('');
     const card = o => {
-      if (o.tires) return T.card(o.tires);
       const id = e(o.rule.id), st = o.snoozed ? 'later' : o.st;
-      const meter = o.used != null ? `<div class="meter" title="Використано ресурсу: ${Math.round(o.used * 100)}%"><i style="width:${Math.min(100, Math.max(3, o.used * 100)).toFixed(0)}%"></i></div>` : '';
       const acts = /over|soon|nodata/.test(o.st) ? `<div class="card-acts">
           <a class="btn small" href="#/edit/visit/new?rule=${id}">Зроблено</a>
           ${isCheckRule(o.rule) ? `<button type="button" class="btn small ghost" data-act="quick-check" data-id="${id}">Перевірено</button>` : ''}
           <button type="button" class="btn small ghost" data-act="snooze" data-id="${id}">${o.snoozed ? 'Відкладено' : 'Пізніше'}</button></div>` : '';
-      return `<div class="card st-${st}">
-        <a class="card-main" href="#/rule/${id}">
-          <b>${e(o.rule.name)}</b>
-          <div class="main-line">${o.snoozed ? 'Відкладено до ' + U.date(o.snoozed) + ' · ' : ''}${mainText(o)}</div>
-          ${meter}
-          ${o.lastDate && o.st !== 'state' ? `<div class="sub">${lastText(o)}</div>` : ''}
-        </a>${acts}</div>`;
+      return `<div class="card st-${st}"><a class="card-main" href="#/rule/${id}"><b>${e(o.rule.name)}</b>
+        <div class="main-line">${o.snoozed ? 'Відкладено до ' + U.date(o.snoozed) + ' · ' : ''}${mainText(o)}</div></a>${acts}</div>`;
     };
-    const block = (k, title) => grp[k].length ? `<h3 class="sec">${title} (${grp[k].length})</h3><div class="cards">${grp[k].map(card).join('')}</div>` : '';
-    const rest = grp.later.length + grp.ok.length;
+    const checksHtml = checks.length ? `<details class="more"><summary>Перевірити при нагоді (${checks.length})</summary><div class="cards">${checks.map(card).join('')}</div></details>` : '';
+    // «Усі вузли» — рядок із лічильниками; розгортається до компактного списку.
+    const all = list.map(o => ({ o, st: o.snoozed && /over|soon|nodata/.test(o.st) ? 'later' : o.st }));
+    const cnt = k => all.filter(x => k.includes(x.st)).length;
+    const allHtml = `<details class="more"><summary>Усі вузли (${all.length}) <span class="cnt c-over">${cnt(['over'])}</span> <span class="cnt c-soon">${cnt(['soon', 'nodata'])}</span> <span class="cnt c-ok">${cnt(['ok', 'state', 'later'])}</span></summary>
+      <div class="list">${all.map(({ o, st }) => `<a class="item crow st-${st}" href="#/rule/${e(o.rule.id)}"><b class="grow">${e(o.rule.name)}</b><span class="muted small">${st === 'state' ? 'за станом' : mainText(o)}</span></a>`).join('')}</div></details>`;
     return {
-      title: 'Головна', noTopKm: true, html: head
-        + block('over', 'Прострочено') + block('soon', 'Незабаром') + block('nodata', 'Немає даних')
-        + (rest ? `<details class="more"${grp.over.length + grp.soon.length + grp.nodata.length ? '' : ' open'}><summary>Гаразд і відкладене (${rest})</summary>`
-          + block('later', 'Відкладено') + block('ok', 'Гаразд') + '</details>' : ''),
+      title: 'Головна', noTopKm: true,
+      html: head + visitCard + tiresCard + checksHtml + thinHtml + allHtml,
     };
   }
 

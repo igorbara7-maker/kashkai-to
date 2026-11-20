@@ -296,6 +296,16 @@ ul.news li { margin: 6px 0; }
 .verdict.st-soon { color: var(--soon); }
 .verdict.st-ok { color: var(--ok); }
 .km-row { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.vlist { margin: 8px 0; }
+.vrow { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--line); color: inherit; text-decoration: none; }
+.vrow .sub { display: block; }
+.vrow > .muted { white-space: nowrap; }
+.thin { display: grid; gap: 4px; margin: 14px 4px 0; }
+.thin a { color: var(--muted, inherit); text-decoration: none; font-size: .92rem; }
+.cnt { display: inline-block; min-width: 1.5em; padding: 0 6px; border-radius: 10px; text-align: center; font-size: .8rem; font-weight: 700; color: #fff; }
+.cnt.c-over { background: var(--over); } .cnt.c-soon { background: var(--soon); } .cnt.c-ok { background: var(--ok); }
+.crow { display: block; padding: 8px 12px; }
+.crow .muted { display: block; }
 .hint { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: var(--soon-bg); font-size: .92rem; }
 .card { padding: 0; overflow: hidden; }
 .card-main { display: block; padding: 12px 14px; color: inherit; text-decoration: none; }
