@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.10.0';
+  const VERSION = '0.11.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -36,6 +36,7 @@ const App = (() => {
         case 'notes': r = V.notes(); break;
         case 'probih': r = V.probih(); break;
         case 'palne': r = P.screen(); break;
+        case 'shyny': r = T.screen(); break;
         case 'obmin': r = V.obmin(); break;
         case 'excel': r = Excel.screen(); break;
         case 'nalashtuvannia': r = V.nalashtuvannia(); break;
@@ -95,6 +96,7 @@ const App = (() => {
       <a class="item" href="#/edit/doc/new"><b>Новий документ / чек вручну</b><div class="sub">Акт, накладна, чек — з позиціями і фото</div></a>
       <a class="item" href="#/edit/fuel/new"><b>Заправка</b><div class="sub">Літри, сума, пробіг — для витрати пального</div></a>
       <a class="item" href="#/edit/odo/new"><b>Записати пробіг</b><div class="sub">Показ одометра</div></a>
+      <a class="item" href="#/edit/tireevent/new"><b>Шини</b><div class="sub">Сезонна заміна, огляд, ремонт</div></a>
       <a class="item" href="#/edit/note/new"><b>Нотатка</b><div class="sub">Порада механіка, нагадування</div></a>
       <button class="btn ghost wide" data-act="sheet-close">Закрити</button>`);
   }
@@ -204,20 +206,25 @@ const App = (() => {
     U.toast('Записано. Запис можна змінити чи видалити в історії вузла.', 4000);
     route();
   }
+  // Відкласти можна пункт регламенту або картку «Шини» (id 'tires' — дата в записі автомобіля).
+  const snoozeRec = id => id === 'tires'
+    ? { rec: DB.get('vehicle') || { id: 'vehicle', t: 'vehicle' }, key: 'tireSnooze', name: 'Шини' }
+    : (r => r && { rec: r, key: 'snooze', name: r.name })(DB.get(id));
   function snooze(id) {
-    const r = DB.get(id);
-    if (!r) return;
+    const x = snoozeRec(id);
+    if (!x) return;
+    const r = { name: x.name, snooze: x.rec[x.key] };
     const opt = (days, t) => `<button class="item" data-act="snooze-set" data-id="${U.esc(id)}" data-days="${days}"><b>${t}</b><div class="sub">до ${U.date(U.addDays(U.today(), days))}</div></button>`;
     openSheet(`<h3>Нагадати пізніше: ${U.esc(r.name)}</h3>
-      <p class="muted small">Вузол перейде в «Відкладено» і не рахуватиметься простроченим до цієї дати. Запис у журналі він не замінює.</p>
+      <p class="muted small">${id === 'tires' ? 'Картка перейде в «Відкладено» до цієї дати. Запис заміни це не замінює.' : 'Вузол перейде в «Відкладено» і не рахуватиметься простроченим до цієї дати. Запис у журналі він не замінює.'}</p>
       ${opt(14, 'Через 2 тижні')}${opt(30, 'Через місяць')}${opt(91, 'Через 3 місяці')}
       ${r.snooze && r.snooze > U.today() ? `<button class="item" data-act="snooze-set" data-id="${U.esc(id)}" data-days="0"><b>Скасувати відкладення</b><div class="sub">зараз відкладено до ${U.date(r.snooze)}</div></button>` : ''}
       <button class="btn ghost wide" data-act="sheet-close">Закрити</button>`);
   }
   async function snoozeSet(id, days) {
-    const r = DB.get(id);
-    if (!r) return;
-    await DB.save(Object.assign({}, r, { snooze: days > 0 ? U.addDays(U.today(), days) : null }));
+    const x = snoozeRec(id);
+    if (!x) return;
+    await DB.save(Object.assign({}, x.rec, { [x.key]: days > 0 ? U.addDays(U.today(), days) : null }));
     closeSheet();
     U.toast(days > 0 ? 'Відкладено до ' + U.date(U.addDays(U.today(), days)) : 'Відкладення скасовано');
     route();
@@ -275,6 +282,9 @@ const App = (() => {
         F.itemsTotal(form);
         break;
       }
+      case 'tg-add': T.addGroup(); break;
+      case 'tg-del': el.closest('.tg-ed').remove(); break;
+      case 'bolts-ok': await T.boltsOk(el.dataset.id); route(); break;
       case 'copy': copyText(document.querySelector(el.dataset.src).textContent); break;
       case 'share': {
         const text = document.querySelector(el.dataset.src).textContent;
@@ -418,6 +428,12 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.11.0': [
+      'Шини: Ще → «Шини». Додайте комплекти — зимові й літні: марка, модель, розмір, DOT (тиждень і рік виготовлення). Якщо на осях різні шини — дві групи по 2.',
+      'Записуйте сезонні заміни (+ → «Шини»): програма покаже, що стоїть зараз, пробіг кожного комплекту за сезон і за весь час, вік шин.',
+      'На головному екрані — картка «Шини» замість пункту регламенту: навесні й восени нагадає про заміну, попередить про старі шини (понад 6 років) і малий протектор; після заміни — перевірити болти.',
+      '«Пальне»: витрата окремо на зимових і літніх шинах. У таблиці Excel — аркуш «Шини». Дати сезонних замін — у Налаштуваннях → Автомобіль.',
+    ],
     '0.10.0': [
       'Пальне: «+» → «Заправка» (і ярлик «Заправка» на значку). Літри, ціна за літр, сума — досить двох, третє програма порахує. Вкажіть пробіг; за бажанням — фото чека.',
       'Ще → «Пальне»: середня витрата на 100 км і вартість кілометра — за 3 місяці, рік і весь час. До повного бака заправлятися не треба: витрата рахується за період.',

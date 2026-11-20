@@ -150,7 +150,15 @@ const F = (() => {
         { k: 'vin', label: 'VIN', type: 'text' },
         { k: 'warnKm', label: 'Попереджати за, км', type: 'number', mode: 'numeric' },
         { k: 'warnDays', label: 'Попереджати за, днів', type: 'number', mode: 'numeric' },
+        { k: 'tireSummer', label: 'Літні шини ставити', type: 'text', hint: 'з–по, ДД.ММ–ДД.ММ (стоять зимові — нагадає)' },
+        { k: 'tireWinter', label: 'Зимові шини ставити', type: 'text', hint: 'з–по, ДД.ММ–ДД.ММ (стоять літні — нагадає)' },
       ],
+      check: r => {
+        for (const k of ['tireSummer', 'tireWinter']) {
+          if (r[k] && M.seasonDates(r[k]).length !== 2) { U.toast('Дати заміни шин — дві дати ДД.ММ, напр. 01.04–30.04', 4000); return false; }
+        }
+        return true;
+      },
     },
   };
 
@@ -161,6 +169,8 @@ const F = (() => {
   function render(type, id, q) {
     if (type === 'visit') return visit(q);
     if (type === 'doc') return docForm(id, q);
+    if (type === 'tireset') return T.setForm(id);
+    if (type === 'tireevent') return T.eventForm(id, q);
     const def = DEFS[type];
     if (!def) return V.notFound();
     const isNew = id === 'new';
@@ -402,6 +412,7 @@ const F = (() => {
   function onInput(ev) {
     const t = ev.target, form = t.form;
     if (form && form.dataset.form === 'fuel') { P.hint(form); return; }
+    if (form && /^tire/.test(form.dataset.form)) { T.onInput(ev, form); return; }
     if (!form || form.dataset.form !== 'doc') return;
     const auto = t.closest('.auto');
     if (auto) auto.classList.remove('auto'); // власник виправив — позначку знімаємо
@@ -449,6 +460,8 @@ const F = (() => {
     const type = form.dataset.form, id = form.dataset.id;
     if (type === 'visit') return submitVisit(form);
     if (type === 'doc') return submitDoc(form);
+    if (type === 'tireset') return T.submitSet(form);
+    if (type === 'tireevent') return T.submitEvent(form);
     const def = DEFS[type];
     const vals = read(form, def.fields());
     let base;
@@ -483,12 +496,17 @@ const F = (() => {
       const n = DB.filesOf(id).length;
       msg = 'Видалити заправку' + (n ? ' разом із фото чека (' + n + ')' : '') + '?';
     }
+    if (type === 'tireset') {
+      const n = DB.list('tireevent').filter(x => x.on === id || x.off === id).length, p = DB.filesOf(id).length;
+      msg = (n ? 'Комплект згадується в історії замін (' + n + '). Якщо шини просто більше не використовуєте — краще позначте «Більше не використовується»: історія і пробіг лишаться. ' : '')
+        + 'Видалити комплект' + (p ? ' разом із фото (' + p + ')' : '') + '?';
+    }
     if (!confirm(msg)) return false;
-    if (type === 'doc' || type === 'fuel') await DB.removeFiles(DB.filesOf(id).map(f => f.id));
+    if (type === 'doc' || type === 'fuel' || type === 'tireset') await DB.removeFiles(DB.filesOf(id).map(f => f.id));
     await DB.remove(id);
     U.toast('Видалено');
     return { go: type === 'doc' ? '#/docs' : type === 'rule' ? '#/reglament' : null };
   }
 
-  return { render, submit, del, onInput, itemEd, itemsTotal, setPending, pick };
+  return { render, submit, del, onInput, itemEd, itemsTotal, setPending, pick, field, kmOk, docOpts, actions };
 })();

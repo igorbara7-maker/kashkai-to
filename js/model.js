@@ -1,7 +1,7 @@
 'use strict';
 // Розрахунки: поточний пробіг, стан вузлів за регламентом, витрати.
 const M = (() => {
-  const DEF_VEHICLE = { id: 'vehicle', t: 'vehicle', name: 'Мій автомобіль', vin: '', warnKm: 1500, warnDays: 45 };
+  const DEF_VEHICLE = { id: 'vehicle', t: 'vehicle', name: 'Мій автомобіль', vin: '', warnKm: 1500, warnDays: 45, tireSummer: '01.04–30.04', tireWinter: '15.10–15.11' };
   const CATS = [
     'ТО: комплекс робіт', 'Олива двигуна і фільтр', 'Фільтри повітря і салону', 'Свічки запалювання',
     'Гальмівна система', 'Антифриз', 'Ремінь і ролики приводу', 'Олива МКПП', 'Ходова і рульове',
@@ -19,7 +19,7 @@ const M = (() => {
   const byDate = (a, b) => (a.date || '').localeCompare(b.date || '') || ((a.km || 0) - (b.km || 0));
   function vehicle() {
     const v = Object.assign({}, DEF_VEHICLE, DB.get('vehicle') || {});
-    for (const k of ['name', 'warnKm', 'warnDays']) if (v[k] == null || v[k] === '') v[k] = DEF_VEHICLE[k];
+    for (const k of ['name', 'warnKm', 'warnDays', 'tireSummer', 'tireWinter']) if (v[k] == null || v[k] === '') v[k] = DEF_VEHICLE[k];
     return v;
   }
   const rules = () => DB.list('rule').sort((a, b) => (a.order ?? 999) - (b.order ?? 999) || a.name.localeCompare(b.name, 'uk'));
@@ -36,6 +36,7 @@ const M = (() => {
     for (const r of works()) if (r.date && r.km != null && !r.kmEst) pts.push({ date: r.date, km: r.km });
     for (const r of docs()) if (r.date && r.km != null && !r.kmEst) pts.push({ date: r.date, km: r.km });
     for (const r of DB.list('fuel')) if (r.date && r.km != null) pts.push({ date: r.date, km: r.km });
+    for (const r of DB.list('tireevent')) if (r.date && r.km != null) pts.push({ date: r.date, km: r.km });
     return pts.sort(byDate);
   }
   const current = (pts = points()) => pts.length ? pts[pts.length - 1] : null;
@@ -308,13 +309,13 @@ const M = (() => {
   // «Гаразд» запам'ятовує коди в записі (ok) — пункт повернеться лише з новою причиною.
   // Записи журналу, прив'язані до документа, ідуть одним пунктом із ним.
   const DOUBT_RE = /уточн|не\s+видн|не\s+вказ|непевн|пробіг[^.;\n]{0,15}оцінк|взято\s+оцінк/i;
-  const DOUBT_FIELDS = { work: [['note', 'Примітка']], doc: [['about', 'Зміст'], ['seller', 'СТО'], ['number', 'Номер']], odo: [['src', 'Звідки']], fuel: [['note', 'Примітка']] };
+  const DOUBT_FIELDS = { work: [['note', 'Примітка']], doc: [['about', 'Зміст'], ['seller', 'СТО'], ['number', 'Номер']], odo: [['src', 'Звідки']], fuel: [['note', 'Примітка']], tireevent: [['note', 'Примітка']] };
   const clip = (s, n = 140) => { s = String(s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 
   function issues() {
     const out = [];
     const add = (r, code, why, other) => out.push({ r, code, why, other: other || null });
-    const os = odos(), ws = works(), ds = docs(), all = [...os, ...ws, ...ds, ...fuels()];
+    const os = odos(), ws = works(), ds = docs(), all = [...os, ...ws, ...ds, ...fuels(), ...DB.list('tireevent')];
     for (const r of all) if (r.kmEst && r.km != null) add(r, 'est', 'Пробіг ' + U.km(r.km, true) + ' — лише оцінка');
     for (const r of all) {
       for (const [f, label] of DOUBT_FIELDS[r.t]) if (typeof r[f] === 'string' && DOUBT_RE.test(r[f])) add(r, 'txt', label + ': ' + clip(r[f]));

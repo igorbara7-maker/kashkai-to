@@ -228,6 +228,9 @@ details > summary { cursor: pointer; padding: 8px 0; color: var(--accent); font-
 .item-ed { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-bottom: 10px; display: grid; gap: 8px; }
 .item-ed select { width: auto; flex: none; }
 .grid-items { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.tg-ed .fld { margin-bottom: 4px; }
+@media (min-width: 600px) { .grid2 { grid-template-columns: 1fr 1fr 1fr; } }
 .grid-items .span2 { grid-column: span 2; }
 @media (min-width: 600px) { .grid-items { grid-template-columns: 2fr 1fr 1fr 1fr 1.2fr; } .grid-items .span2 { grid-column: auto; } }
 .x { flex: none; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 8px; background: none; color: var(--danger); font-size: 1.3rem; cursor: pointer; }

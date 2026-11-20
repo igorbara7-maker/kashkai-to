@@ -282,6 +282,12 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
       rows.push(u ? [p.name, { v: Math.round(u.per100 * 10) / 10, s: S.dec1 }, Mo(u.perKm), K(u.km), { v: Math.round(u.litres * 100) / 100, s: S.lit },
         Mo(u.sum), u.n, Dt(u.from), Dt(u.to), u.approx ? 'приблизно — ще мало заправок' : null] : [p.name, null, null, null, null, null, null, null, null, 'мало даних']);
     }
+    const bs = P.bySeason(fs);
+    if (bs) for (const k of Object.keys(bs)) {
+      const u = bs[k];
+      rows.push([T.ON_SEASON[k], { v: Math.round(u.per100 * 10) / 10, s: S.dec1 }, Mo(u.perKm), K(u.km), { v: Math.round(u.litres * 100) / 100, s: S.lit },
+        Mo(u.sum), u.n, Dt(u.from), Dt(u.to), 'за весь час' + (u.approx ? '; приблизно — ще мало заправок' : '')]);
+    }
     rows.push([]);
     const hr = rows.length + 1;
     rows.push(head(['Дата', 'Пробіг, км', 'Літрів', 'Ціна, грн/л', 'Сума, грн', 'Пальне', 'АЗС', 'Попередню не записано', 'Примітка', 'Фото чека, шт.']));
@@ -290,6 +296,42 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
         f.missed ? 'Так' : null, W(f.note), DB.filesOf(f.id).length || null]);
     }
     return table({ name: 'Пальне', rows, freeze: [0, hr], cols: [12, 11, 10, 11, 12, 10, 16, 12, 40, 9] }, hr, fs.length, 10);
+  }
+
+  function tiresSheet() {
+    const ctx = M.context(), st = T.stints(ctx), cur = T.current(ctx, st), evs = T.events();
+    const rows = [
+      [{ v: 'Шини', s: S.title }],
+      [{ v: 'Вік — за DOT (тиждень і рік виготовлення). Пробіг комплекту — від заміни до заміни; ≈ — оцінка. Протектор — останній вимір.', s: S.note }],
+      [],
+      ['Зараз стоять:', cur ? T.nameOf(cur.setRec) + ' — з ' + U.date(cur.from) : 'не вказано'],
+      [],
+    ];
+    const hr = rows.length + 1;
+    rows.push(head(['Комплект', 'Сезон', 'Стан', 'Марка', 'Модель', 'Розмір', 'DOT', 'Вік, років', 'К-сть', 'Де стоять', 'Куплено',
+      'Ціна за шину, грн', 'Знято', 'Протектор, мм', 'Протектор виміряно', 'Пробіг, км', 'Де зберігаються', 'Примітка']));
+    let n = 0;
+    for (const s of T.sets()) {
+      const k = T.setKm(s.id, st, ctx);
+      const state = cur && cur.set === s.id ? 'на авто' : s.retired ? 'не використовується' : 'зберігаються';
+      for (const g of s.groups && s.groups.length ? s.groups : [{}]) {
+        const a = T.age(g.dot, ctx.today), t = g.id ? T.tread(g.id, evs) : null, gk = k && g.id ? T.groupKm(g, s.id, st, ctx) : null;
+        rows.push([W(T.nameOf(s)), T.SEASONS[s.season], state, g.brand, g.model, g.size, g.dot, { v: a == null ? null : Math.round(a * 10) / 10, s: S.dec1 },
+          g.count, T.POS[g.pos], Dt(g.bought), Mo(g.price), Dt(g.to), { v: t ? t.mm : null, s: S.dec1 }, Dt(t && t.date),
+          K(gk ? gk.km || null : null, gk && gk.est), W(s.storage), W([s.note, g.note].filter(Boolean).join('; '))]);
+        n++;
+      }
+    }
+    rows.push([], [{ v: 'Події', s: S.bold }]);
+    rows.push(head(['Дата', 'Пробіг, км', 'Подія', 'Поставили', 'Зняли', 'Де', 'Вартість, грн', 'Документ', 'Протектор, мм', 'Тиск', 'Примітка']));
+    const gname = {};
+    for (const s of T.sets()) for (const g of s.groups || []) gname[g.id] = T.nameOf(s) + ' ' + T.groupName(g);
+    for (const x of evs) {
+      const tr = x.tread ? Object.entries(x.tread).map(([id, v]) => (gname[id] || 'шини') + ': ' + String(v).replace('.', ',')).join('; ') : null;
+      rows.push([Dt(x.date), K(x.km), T.KINDS[x.kind], x.on ? T.nameOf(DB.get(x.on)) : null, x.off ? T.nameOf(DB.get(x.off)) : null, W(x.where),
+        Mo(x.cost), docCode(x.doc), W(tr), x.pressure, W(x.note)]);
+    }
+    return table({ name: 'Шини', rows, freeze: [0, 0], cols: [16, 11, 14, 14, 18, 13, 7, 9, 6, 13, 12, 11, 12, 11, 12, 11, 20, 36] }, hr, n, 18);
   }
 
   function probihSheet() {
@@ -317,7 +359,7 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
   async function build() {
     const now = new Date();
     const v = M.vehicle();
-    const sheets = [stanSheet(now), zhurnalSheet(), docsSheet(), itemsSheet(), costsSheet(), fuelSheet(), probihSheet(), reglamentSheet(), notesSheet()];
+    const sheets = [stanSheet(now), zhurnalSheet(), docsSheet(), itemsSheet(), costsSheet(), fuelSheet(), ...(T.has() ? [tiresSheet()] : []), probihSheet(), reglamentSheet(), notesSheet()];
     const blob = await write(sheets, v.name + ' — облік ТО');
     const name = `кашкай_таблиця_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.xlsx`;
     return new File([blob], name, { type: MIME });
@@ -354,7 +396,7 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
     return {
       title: 'Таблиця Excel', back: true, html: `
       <section class="panel">
-        <p>Усі дані одним файлом Excel: стан вузлів, журнал робіт, документи і їхні позиції, витрати за роками й категоріями, пальне, пробіг, регламент, нотатки.</p>
+        <p>Усі дані одним файлом Excel: стан вузлів, журнал робіт, документи і їхні позиції, витрати за роками й категоріями, пальне, шини, пробіг, регламент, нотатки.</p>
         <p class="muted small">Записів у журналі: ${M.works().length}, документів: ${M.docs().length}, позицій: ${items}, заправок: ${M.fuels().length}. Фото у таблицю не входять — вони є в копії «Обмін даними».</p>
         <p class="actions"><button class="btn" data-act="excel-save">Зберегти таблицю</button></p>
         <div id="excelOut"></div>

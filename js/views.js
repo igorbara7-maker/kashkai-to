@@ -49,9 +49,12 @@ const V = (() => {
   }
 
   // ---------- Стан ----------
+  // Коли є комплекти шин, пункт регламенту про шини заміняє картка «Шини».
+  const isTireRule = o => /шин/i.test(o.rule.name);
   function stan() {
     const ctx = M.context();
-    const list = M.allStatus(ctx);
+    const tires = T.status(ctx);
+    const list = M.allStatus(ctx).filter(o => !tires || !isTireRule(o));
     if (!DB.list('rule').length && !ctx.cur) {
       return {
         title: 'Стан', html: `
@@ -65,12 +68,17 @@ const V = (() => {
     const cur = ctx.cur;
     const grp = { over: [], soon: [], nodata: [], later: [], ok: [] };
     list.forEach(o => grp[o.snoozed && /over|soon|nodata/.test(o.st) ? 'later' : o.st === 'state' ? 'ok' : o.st].push(o));
+    if (tires) grp[tires.snoozed && tires.st !== 'ok' ? 'later' : tires.st].push({ tires });
     // Висновок одним реченням.
-    const names = arr => arr.slice(0, 3).map(o => o.rule.name.replace(/\s*\(.*\)$/, '')).join(', ') + (arr.length > 3 ? ' та ще ' + (arr.length - 3) : '');
+    const nm = o => o.tires ? 'Шини' : o.rule.name;
+    const names = arr => arr.slice(0, 3).map(o => nm(o).replace(/\s*\(.*\)$/, '')).join(', ') + (arr.length > 3 ? ' та ще ' + (arr.length - 3) : '');
     const near = list.filter(o => o.st === 'ok' && o.remDays != null).sort((a, b) => a.remDays - b.remDays)[0];
     let verdict;
     if (grp.over.length) verdict = `<div class="verdict st-over">Прострочено: ${grp.over.length}</div><div class="sub">${e(names(grp.over))}</div>`;
-    else if (grp.soon.length) verdict = `<div class="verdict st-soon">Незабаром: ${e(grp.soon[0].rule.name)}</div><div class="sub">${mainText(grp.soon[0])}${grp.soon.length > 1 ? ' · і ще ' + (grp.soon.length - 1) : ''}</div>`;
+    else if (grp.soon.length) {
+      const s0 = grp.soon[0];
+      verdict = `<div class="verdict st-soon">Незабаром: ${e(nm(s0))}</div><div class="sub">${s0.tires ? e(s0.tires.main) : mainText(s0)}${grp.soon.length > 1 ? ' · і ще ' + (grp.soon.length - 1) : ''}</div>`;
+    }
     else verdict = `<div class="verdict st-ok">Усе гаразд</div>${near ? `<div class="sub">Найближче: ${e(near.rule.name)} — ${mainText(near)}</div>` : ''}`;
     // Новий місяць, а показу пробігу в ньому ще немає (одометр, заправка, ТО) — від пробігу залежать усі строки.
     const odoAge = cur ? U.days(cur.date, ctx.today) : null;
@@ -90,6 +98,7 @@ const V = (() => {
         ${odoNote}${copyNote}
       </section>`;
     const card = o => {
+      if (o.tires) return T.card(o.tires);
       const id = e(o.rule.id), st = o.snoozed ? 'later' : o.st;
       const meter = o.used != null ? `<div class="meter" title="Використано ресурсу: ${Math.round(o.used * 100)}%"><i style="width:${Math.min(100, Math.max(3, o.used * 100)).toFixed(0)}%"></i></div>` : '';
       const acts = /over|soon|nodata/.test(o.st) ? `<div class="card-acts">
@@ -341,6 +350,7 @@ const V = (() => {
         ${link('#/notes', 'Нотатки' + (n ? ` (${n})` : ''), 'Відкриті питання, поради механіків')}
         ${link('#/perevirka', 'Перевірити дані' + (nc ? ` (${nc})` : ''), 'Оцінений пробіг, «уточніть», пробіг не по порядку, документи поза журналом')}
         ${link('#/palne', 'Пальне', 'Заправки, середня витрата, вартість кілометра')}
+        ${link('#/shyny', 'Шини', 'Комплекти, що стоїть зараз, сезонні заміни, вік і протектор')}
         ${link('#/probih', 'Пробіг', 'Усі покази одометра')}
         ${link('#/reglament', 'Регламент', 'Пункти обслуговування та інтервали — можна правити')}
         ${link('#/obmin', 'Обмін даними', 'Копія для телефона чи компа, імпорт')}
@@ -352,7 +362,8 @@ const V = (() => {
 
   function maistru() {
     const ctx = M.context(), v = ctx.v;
-    const list = M.allStatus(ctx);
+    const tires = T.status(ctx);
+    const list = M.allStatus(ctx).filter(o => !tires || !isTireRule(o));
     const L = [];
     L.push(v.name);
     if (v.vin) L.push('VIN ' + v.vin);
@@ -363,6 +374,7 @@ const V = (() => {
     sect('НЕЗАБАРОМ:', list.filter(o => o.st === 'soon'), o => o.rule.name + ' — ' + (o.rule.action || '').toLowerCase() + ' (' + remText(o) + ')');
     sect('ПЕРЕВІРИТИ (немає записів про заміну):', list.filter(o => o.st === 'nodata'), o => o.rule.name + (o.rule.action ? ' — ' + o.rule.action.toLowerCase() : ''));
     sect('ПОДИВИТИСЬ СТАН:', list.filter(o => o.st === 'state'), o => o.rule.name + ' (' + last(o) + ')');
+    sect('ШИНИ:', T.masterLines(tires), x => x);
     const ns = M.notes().filter(n => !n.done && n.master);
     if (ns.length) { L.push(''); L.push('ЩЕ:'); ns.forEach(n => L.push('• ' + n.text)); }
     const text = L.join('\n');
@@ -385,7 +397,8 @@ const V = (() => {
     const item = (g, isOk) => {
       const m = g.main;
       const title = m.t === 'doc' ? 'Документ ' + [m.code, m.seller].filter(Boolean).join(' · ')
-        : m.t === 'work' ? 'Журнал: ' + ruleName(m.rule) : m.t === 'odo' ? 'Показ пробігу' : m.t === 'fuel' ? 'Заправка' : 'Нотатка';
+        : m.t === 'work' ? 'Журнал: ' + ruleName(m.rule) : m.t === 'odo' ? 'Показ пробігу' : m.t === 'fuel' ? 'Заправка'
+          : m.t === 'tireevent' ? 'Шини: ' + (T.KINDS[m.kind] || 'подія').toLowerCase() : 'Нотатка';
       const ws = g.recs.filter(r => r.t === 'work' && r !== m);
       const ids = e(g.recs.map(r => r.id).join(','));
       const btn = isOk
@@ -459,7 +472,8 @@ const V = (() => {
       <section class="panel">
         <h3>${e(v.name)}</h3>
         <dl class="kv">${v.vin ? `<dt>VIN</dt><dd>${e(v.vin)}</dd>` : ''}
-          <dt>Попереджати за</dt><dd>${U.km(v.warnKm)} або ${U.daysText(v.warnDays)}</dd></dl>
+          <dt>Попереджати за</dt><dd>${U.km(v.warnKm)} або ${U.daysText(v.warnDays)}</dd>
+          <dt>Заміна шин</dt><dd>літні — ${e(v.tireSummer)}, зимові — ${e(v.tireWinter)}</dd></dl>
         <p class="actions"><a class="btn" href="#/edit/vehicle/vehicle">Змінити</a></p>
       </section>
       ${P.calendarPanel()}

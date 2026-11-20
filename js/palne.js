@@ -49,24 +49,42 @@ const P = (() => {
   // ---------- розрахунки ----------
   const litres = f => f.litres != null ? f.litres : f.sum != null && f.price ? f.sum / f.price : 0;
 
-  // Витрата за період [from, to]. Ланцюжок рветься на заправці з позначкою «попередню не записано».
-  function usage(from, to = U.today(), list = M.fuels()) {
-    let L = 0, S = 0, km = 0, n = 0, start = null, accL = 0, accS = 0, accN = 0, first = null, last = null;
+  // Відрізки між заправками з пробігом: літри, залиті після першої і до другої включно, і пробіг між ними.
+  // Ланцюжок рветься на заправці з позначкою «попередню не записано».
+  function segments(list, from = '0000', to = '9999') {
+    const out = [];
+    let start = null, accL = 0, accS = 0, accN = 0;
     for (const f of list) {
       if (!f.date || f.date < from || f.date > to) continue;
       if (f.missed) start = null;
       if (!start) { if (f.km != null) { start = f; accL = accS = accN = 0; } continue; }
       accL += litres(f); accS += f.sum || 0; accN++;
       if (f.km == null) continue;
-      if (f.km > start.km) {
-        L += accL; S += accS; n += accN; km += f.km - start.km;
-        if (!first) first = start.date;
-        last = f.date;
-      }
+      if (f.km > start.km) out.push({ a: start, b: f, litres: accL, sum: accS, n: accN, km: f.km - start.km });
       start = f; accL = accS = accN = 0;   // пробіг не зріс (помилка в цифрах) — починаємо звідси
     }
+    return out;
+  }
+  function sumUp(segs) {
+    let L = 0, S = 0, km = 0, n = 0;
+    for (const x of segs) { L += x.litres; S += x.sum; km += x.km; n += x.n; }
     if (km <= 0) return null;
-    return { litres: L, sum: S, km, n, from: first, to: last, per100: L / km * 100, perKm: S / km, approx: n < 4 || km < 1500 };
+    return { litres: L, sum: S, km, n, from: segs[0].a.date, to: segs[segs.length - 1].b.date, per100: L / km * 100, perKm: S / km, approx: n < 4 || km < 1500 };
+  }
+  // Витрата за період [from, to].
+  function usage(from, to = U.today(), list = M.fuels()) { return sumUp(segments(list, from, to)); }
+
+  // Витрата окремо на зимових і літніх шинах: відрізок іде до сезону шин, що стояли посередині між заправками.
+  function bySeason(list = M.fuels()) {
+    if (!T.has()) return null;
+    const st = T.stints(), g = {};
+    for (const x of segments(list)) {
+      const k = T.seasonAt(U.addDays(x.a.date, U.days(x.a.date, x.b.date) / 2), st);
+      if (k) (g[k] = g[k] || []).push(x);
+    }
+    const out = {};
+    for (const k of ['winter', 'summer', 'all']) if (g[k]) out[k] = sumUp(g[k]);
+    return Object.keys(out).length ? out : null;
   }
 
   // Заправлено за місяць чи рік (prefix: '2026' або '2026-11').
@@ -126,6 +144,7 @@ const P = (() => {
         </div>${add}</div>
       </section>
       ${main ? `<section class="panel"><h3>Витрата і вартість кілометра</h3><dl class="kv">${ps.filter((p, i) => !(i === 2 && same(p.u, ps[1].u))).map(p => `<dt>${p.name}</dt><dd>${usageText(p.u)}</dd>`).join('')}</dl></section>` : ''}
+      ${seasonPanel(bySeason(fs))}
       <section class="panel">
         <h3>Заправлено</h3>
         <dl class="kv">
@@ -138,6 +157,16 @@ const P = (() => {
       <div class="list">${fs.slice().reverse().map(item).join('')}</div>
       ${howTo()}`,
     };
+  }
+
+  function seasonPanel(bs) {
+    if (!bs) return '';
+    const w = bs.winter, s = bs.summer;
+    const diff = w && s ? Math.round((w.per100 / s.per100 - 1) * 100) : null;
+    return `<section class="panel"><h3>Взимку і влітку</h3>
+      <dl class="kv">${Object.keys(bs).map(k => `<dt>${T.ON_SEASON[k]}</dt><dd>${usageText(bs[k])}</dd>`).join('')}</dl>
+      ${diff != null && diff !== 0 ? `<p class="small">На зимових шинах витрата ${diff > 0 ? 'більша' : 'менша'} на ${w.approx || s.approx ? '≈ ' : ''}${Math.abs(diff)} %.</p>` : ''}
+      <p class="muted small">За тим, які шини стояли (Ще → Шини), за весь час.</p></section>`;
   }
 
   function howTo() {
@@ -160,14 +189,16 @@ const P = (() => {
     return today.getDate() === 1 ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() + 1, 1);
   }
   function events() {
-    const url = appUrl();
+    const url = appUrl(), W = T.windows();
+    const mmdd = x => x.split('-').map(Number);
+    const [sm, sd] = mmdd(W.summer[0]), [wm, wd] = mmdd(W.winter[0]);
     return [
       { id: 'probih', title: 'Кашкай — записати пробіг', when: 'Щомісяця 1-го о 9:00 — записати пробіг', start: nextFirst(),
         rrule: 'FREQ=MONTHLY;BYMONTHDAY=1', text: 'Запишіть пробіг за одометром у програму «Кашкай ТО»: ' + url + '#/edit/odo/new' },
-      { id: 'shyny-lito', title: 'Кашкай — поставити літні шини', when: 'Щороку 1 квітня — поставити літні шини', start: nextDate(4, 1),
-        rrule: 'FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=1', text: 'Сезонна заміна шин: до кінця квітня поставити літні. Після заміни — запис у програмі «Кашкай ТО»: ' + url },
-      { id: 'shyny-zyma', title: 'Кашкай — поставити зимові шини', when: 'Щороку 15 жовтня — поставити зимові шини', start: nextDate(10, 15),
-        rrule: 'FREQ=YEARLY;BYMONTH=10;BYMONTHDAY=15', text: 'Сезонна заміна шин: до 15 листопада поставити зимові. Після заміни — запис у програмі «Кашкай ТО»: ' + url },
+      { id: 'shyny-lito', title: 'Кашкай — поставити літні шини', when: 'Щороку ' + T.dayMonth(W.summer[0]) + ' — поставити літні шини', start: nextDate(sm, sd),
+        rrule: 'FREQ=YEARLY;BYMONTH=' + sm + ';BYMONTHDAY=' + sd, text: 'Сезонна заміна шин: до ' + T.dayMonth(W.summer[1]) + ' поставити літні. Після заміни — запис у програмі «Кашкай ТО»: ' + url + '#/edit/tireevent/new?kind=swap' },
+      { id: 'shyny-zyma', title: 'Кашкай — поставити зимові шини', when: 'Щороку ' + T.dayMonth(W.winter[0]) + ' — поставити зимові шини', start: nextDate(wm, wd),
+        rrule: 'FREQ=YEARLY;BYMONTH=' + wm + ';BYMONTHDAY=' + wd, text: 'Сезонна заміна шин: до ' + T.dayMonth(W.winter[1]) + ' поставити зимові. Після заміни — запис у програмі «Кашкай ТО»: ' + url + '#/edit/tireevent/new?kind=swap' },
     ].map(ev => { ev.start.setHours(9, 0, 0, 0); return ev; });
   }
   const stamp = d => d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + 'T' + pad(d.getHours()) + pad(d.getMinutes()) + '00';
@@ -221,5 +252,5 @@ const P = (() => {
     </section>`;
   }
 
-  return { FUELS, STATIONS, complete, hint, usage, totals, periods, litres, screen, calendarPanel, ics, icsText, gcal, events, dec, lit };
+  return { FUELS, STATIONS, complete, hint, usage, bySeason, totals, periods, litres, screen, calendarPanel, ics, icsText, gcal, events, dec, lit };
 })();
