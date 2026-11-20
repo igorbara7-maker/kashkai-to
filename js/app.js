@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.7.0';
+  const VERSION = '0.8.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -14,7 +14,7 @@ const App = (() => {
     return { parts: path.split('/').map(decodeURIComponent), q: new URLSearchParams(i < 0 ? '' : h.slice(i + 1)) };
   }
 
-  const TAB_OF = { '': 'stan', stan: 'stan', rule: 'stan', zhurnal: 'zhurnal', docs: 'docs', doc: 'docs', vytraty: 'vytraty' };
+  const TAB_OF = { '': 'stan', stan: 'stan', rule: 'stan', zhurnal: 'zhurnal', docs: 'docs', doc: 'docs', vytraty: 'vytraty', foto: 'docs', share: 'docs' };
   const TAB_OF_EDIT = { work: 'zhurnal', visit: 'zhurnal', doc: 'docs', odo: 'stan' };
 
   function route() {
@@ -37,6 +37,8 @@ const App = (() => {
         case 'obmin': r = V.obmin(); break;
         case 'excel': r = Excel.screen(); break;
         case 'nalashtuvannia': r = V.nalashtuvannia(); break;
+        case 'foto': r = fotoScreen(); break;
+        case 'share': r = shareScreen(); break;
         case 'edit': r = F.render(b, c, q); break;
         default: r = V.notFound();
       }
@@ -126,6 +128,57 @@ const App = (() => {
       <div class="actions"><button class="btn ghost" data-act="sheet-close">Закрити</button>
       <button class="btn danger" data-act="photo-del" data-id="${U.esc(id)}" data-doc="${U.esc(rec.doc)}">Видалити фото</button></div>`);
     $('sheet').classList.add('full');
+  }
+
+  // ---------- ярлик «Документ з фото» ----------
+  function fotoScreen() {
+    return {
+      title: 'Документ з фото', html: `<section class="panel">
+        <h2>Сфотографуйте документ</h2>
+        <p class="muted small">Акт, чек, накладна — програма прочитає дату, номер, суму й позиції, а ви перевірите і збережете.</p>
+        <div class="actions"><label class="btn">Камера<input type="file" accept="image/*" capture="environment" data-ocr hidden></label>
+        <label class="btn ghost">З галереї<input type="file" accept="image/*" multiple data-ocr hidden></label></div>
+      </section>`,
+    };
+  }
+
+  // ---------- фото, надіслані через «Поділитися → Кашкай ТО» ----------
+  const SHARE_CACHE = 'kashkai-share';
+  let shared = [];
+  async function sharedFiles() {
+    try {
+      const c = await caches.open(SHARE_CACHE), out = [];
+      for (const k of await c.keys()) {
+        const res = await c.match(k), b = await res.blob();
+        out.push(new File([b], decodeURIComponent(res.headers.get('X-Name') || '') || 'фото.jpg', { type: b.type || 'image/jpeg' }));
+      }
+      return out;
+    } catch (x) { return []; }
+  }
+  async function clearShared() { shared = []; try { await caches.delete(SHARE_CACHE); } catch (x) { /* немає сховища */ } }
+  function shareScreen() {
+    const opts = M.docs().reverse().slice(0, 40).map(d => `<option value="${U.esc(d.id)}">${U.esc([d.code, U.date(d.date), d.seller || d.kind].filter(Boolean).join(' · '))}</option>`).join('');
+    return {
+      title: 'Надіслані фото', html: `<section class="panel">
+        <div class="photos" id="shPhotos"></div>
+        <p id="shState" class="muted">Відкриваю фото…</p>
+        <div id="shActs" hidden>
+          <button class="btn wide" data-act="share-doc">Новий документ — розпізнати</button>
+          ${opts ? `<label class="fld" style="display:block;margin-top:14px"><span class="muted small">Або додати до документа</span><select id="shDoc">${opts}</select></label>
+          <button class="btn ghost wide" data-act="share-attach">Додати до вибраного документа</button>` : ''}
+          <button class="btn ghost wide" data-act="share-drop">Не потрібно — прибрати</button>
+        </div></section>`,
+      after: async () => {
+        shared = await sharedFiles();
+        const box = $('shPhotos'), st = $('shState');
+        if (!box) return;
+        if (!shared.length) { st.textContent = 'Фото не отримано. Спробуйте ще раз: у галереї «Поділитися» → «Кашкай ТО».'; return; }
+        box.innerHTML = shared.map(() => '<span class="ph"><img alt="Надіслане фото"></span>').join('');
+        box.querySelectorAll('img').forEach((im, i) => { const u = URL.createObjectURL(shared[i]); photoUrls.push(u); im.src = u; });
+        st.textContent = 'Отримано фото: ' + shared.length + '. Що з ними зробити?';
+        $('shActs').hidden = false;
+      },
+    };
   }
 
   // ---------- швидкі дії на картці вузла ----------
@@ -222,6 +275,23 @@ const App = (() => {
       case 'folder-forget': Obmin.forgetFolder(); break;
       case 'folder-show': Obmin.fillFolder(true); break;
       case 'folder-import': Obmin.importFromFolder(+el.dataset.i); break;
+      case 'share-doc': {
+        if (!shared.length) break;
+        F.setPending(shared.slice());
+        await clearShared();
+        location.replace('#/edit/doc/new?ocr=1');
+        break;
+      }
+      case 'share-attach': {
+        const id = $('shDoc') && $('shDoc').value;
+        if (!id || !shared.length) break;
+        const fs = shared.slice();
+        await clearShared();
+        location.replace('#/doc/' + id);
+        await addPhotos(id, fs);
+        break;
+      }
+      case 'share-drop': await clearShared(); location.replace('#/stan'); break;
       case 'quick-check': quickCheck(el.dataset.id); break;
       case 'quick-check-save': quickCheckSave(el.dataset.id); break;
       case 'snooze': snooze(el.dataset.id); break;
@@ -327,6 +397,11 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.8.0': [
+      'Ярлики: натисніть і потримайте значок програми — «Пробіг», «Документ», «Робота» відкриваються одразу.',
+      'Фото можна надіслати в програму з галереї чи камери: «Поділитися» → «Кашкай ТО» — новий документ або додати до наявного.',
+      'Ярлики й «Поділитися» з’являються, коли телефон оновить значок програми (зазвичай протягом доби після запуску).',
+    ],
     '0.7.0': [
       'Новий головний екран: угорі одне речення — що зараз головне; вузли згруповано: «Прострочено», «Незабаром», «Гаразд» (згорнуто).',
       'На кожній картці — смужка ресурсу: скільки вже «з’їдено» від заміни до заміни.',
