@@ -294,8 +294,66 @@ const M = (() => {
     return [...s];
   }
 
+  // ---------- що варто перевірити в даних ----------
+  // Причини (код): пробіг лише оцінка (est), позначки «уточніть / не видно / не вказано» (txt),
+  // показ пробігу менший, ніж у попередній день (ord), документ без записів у журналі (jr).
+  // «Гаразд» запам'ятовує коди в записі (ok) — пункт повернеться лише з новою причиною.
+  // Записи журналу, прив'язані до документа, ідуть одним пунктом із ним.
+  const DOUBT_RE = /уточн|не\s+видн|не\s+вказ|непевн|пробіг[^.;\n]{0,15}оцінк|взято\s+оцінк/i;
+  const DOUBT_FIELDS = { work: [['note', 'Примітка']], doc: [['about', 'Зміст'], ['seller', 'СТО'], ['number', 'Номер']], odo: [['src', 'Звідки']] };
+  const clip = (s, n = 140) => { s = String(s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+
+  function issues() {
+    const out = [];
+    const add = (r, code, why, other) => out.push({ r, code, why, other: other || null });
+    const os = odos(), ws = works(), ds = docs(), all = [...os, ...ws, ...ds];
+    for (const r of all) if (r.kmEst && r.km != null) add(r, 'est', 'Пробіг ' + U.km(r.km, true) + ' — лише оцінка');
+    for (const r of all) {
+      for (const [f, label] of DOUBT_FIELDS[r.t]) if (typeof r[f] === 'string' && DOUBT_RE.test(r[f])) add(r, 'txt', label + ': ' + clip(r[f]));
+    }
+    for (const n of notes()) if (!n.done && DOUBT_RE.test(n.text || '')) add(n, 'txt', clip(n.text, 200));
+    // Пробіг не по порядку: показ менший за найбільший показ попереднього дня з показами.
+    let prev = null, day = null;
+    for (const r of all.filter(x => x.date && x.km != null && !x.kmEst).sort(byDate)) {
+      if (!day || day.date !== r.date) { prev = day; day = { date: r.date, max: r }; }
+      else if (r.km > day.max.km) day.max = r;
+      if (prev && r.km < prev.max.km) add(r, 'ord', 'Пробіг ' + U.km(r.km) + ' менший, ніж ' + U.km(prev.max.km) + ' на ' + U.date(prev.date) + ' (раніше)', prev.max);
+    }
+    const inJournal = new Set(ws.map(w => w.doc).filter(Boolean));
+    for (const d of ds) {
+      if (!inJournal.has(d.id) && !/калькуляц|рахунок/i.test(d.kind || '')) add(d, 'jr', 'Не позначено виконане в журналі — стан вузлів цей документ не враховує');
+    }
+    return out;
+  }
+
+  // Пункти для перевірки: { active: [...], ok: [...] }, кожен — { main, recs, why, codes, others }.
+  function checkList() {
+    const owner = r => (r.t === 'work' && r.doc && DB.get(r.doc)) || r;
+    const isOk = p => p.r.t !== 'note' && (p.r.ok || []).includes(p.code);
+    const group = arr => {
+      const m = new Map();
+      for (const p of arr) {
+        const main = owner(p.r);
+        if (!m.has(main.id)) m.set(main.id, { main, recs: [], why: [], codes: [], others: [] });
+        const g = m.get(main.id);
+        if (!g.recs.includes(p.r)) g.recs.push(p.r);
+        if (!g.why.includes(p.why)) g.why.push(p.why);
+        if (!g.codes.includes(p.code)) g.codes.push(p.code);
+        if (p.other && owner(p.other) !== main && !g.others.includes(owner(p.other))) g.others.push(owner(p.other));
+      }
+      // Записи — від новіших; нотатки «уточнити» — наприкінці (вони здебільшого про ті самі записи).
+      const isNote = g => g.main.t === 'note' ? 1 : 0;
+      return [...m.values()].sort((a, b) => isNote(a) - isNote(b) || (b.main.date || '').localeCompare(a.main.date || ''));
+    };
+    const ps = issues();
+    const active = group(ps.filter(p => !isOk(p)));
+    const ids = new Set(active.map(g => g.main.id));
+    return { active, ok: group(ps.filter(isOk)).filter(g => !ids.has(g.main.id)) };
+  }
+
   return {
     ST, CATS, DOC_KINDS, vehicle, rules, works, odos, docs, notes, points, current, rate, kmAt,
     context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, yearKm, totalKm, docRules, used, usedCats,
+    issues, checkList,
   };
 })();

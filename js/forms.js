@@ -228,6 +228,7 @@ const F = (() => {
     { k: 'number', label: 'Номер', type: 'text' },
     { k: 'seller', label: 'СТО / продавець', type: 'text', list: M.used('doc', 'seller') },
     { k: 'km', label: 'Пробіг у документі, км', type: 'number', mode: 'numeric' },
+    { k: 'kmEst', label: 'Пробіг — лише оцінка (у документі не вказано)', type: 'check' },
     { k: 'sum', label: 'Сума до сплати, грн', type: 'number', hint: 'як у документі, з урахуванням знижки' },
     { k: 'count', label: 'Враховувати у витратах', type: 'check' },
     { k: 'about', label: 'Що це / рекомендації механіка', type: 'textarea', rows: 3 },
@@ -379,7 +380,7 @@ const F = (() => {
   async function submitDoc(form) {
     const id = form.dataset.id;
     const vals = read(form, docFields());
-    if (!kmOk(vals.date, vals.km)) return false;
+    if (!vals.kmEst && !kmOk(vals.date, vals.km)) return false;
     const items = [...form.querySelectorAll('.item-ed')].map(el => {
       const g = n => el.querySelector(`[name="${n}"]`).value.trim();
       const it = {

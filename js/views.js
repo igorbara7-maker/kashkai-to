@@ -75,6 +75,10 @@ const V = (() => {
     // Давно не записували пробіг — від нього залежать усі строки.
     const odoAge = cur ? U.days(cur.date, ctx.today) : null;
     const odoNote = odoAge != null && odoAge > 30 ? `<div class="hint">Пробіг не записували ${U.daysText(odoAge)} — строки рахуються за оцінкою. <a href="#/edit/odo/new">Записати</a></div>` : '';
+    // Давно не було резервної копії (автокопії в папку чи файлу для іншого пристрою), а зміни є.
+    const lc = Obmin.lastCopy(), copyAge = lc ? Math.floor((Date.now() - lc.at) / 864e5) : 0;
+    const copyNote = copyAge >= 7 && Obmin.unsaved()
+      ? `<div class="hint">Резервної копії не було ${U.daysText(copyAge)}, а зміни є. <button type="button" class="linkbtn" data-act="backup-now">Зробити копію</button></div>` : '';
     const head = `
       <section class="panel">
         ${verdict}
@@ -82,7 +86,7 @@ const V = (() => {
           <div class="big">${U.km(ctx.nowKm, ctx.nowEst)}</div>
           <div class="muted small">${cur ? 'Останній показ: ' + U.km(cur.km) + ' на ' + U.date(cur.date) : 'Пробіг ще не записано'}${ctx.r ? ' · ≈ ' + U.int(ctx.r * 365) + ' км на рік' : ''}</div>
         </div><a class="btn" href="#/edit/odo/new">Пробіг</a></div>
-        ${odoNote}
+        ${odoNote}${copyNote}
       </section>`;
     const card = o => {
       const id = e(o.rule.id), st = o.snoozed ? 'later' : o.st;
@@ -323,11 +327,13 @@ const V = (() => {
   // ---------- Ще ----------
   function sche() {
     const n = M.notes().filter(x => !x.done).length;
+    const nc = M.checkList().active.length;
     const link = (h, t, s) => `<a class="item" href="${h}"><b>${t}</b>${s ? `<div class="sub">${s}</div>` : ''}</a>`;
     return {
       title: 'Ще', html: `<div class="list">
         ${link('#/maistru', 'Список для майстра', 'Що зробити і перевірити — щоб показати чи надіслати на СТО')}
         ${link('#/notes', 'Нотатки' + (n ? ` (${n})` : ''), 'Відкриті питання, поради механіків')}
+        ${link('#/perevirka', 'Перевірити дані' + (nc ? ` (${nc})` : ''), 'Оцінений пробіг, «уточніть», пробіг не по порядку, документи поза журналом')}
         ${link('#/probih', 'Пробіг', 'Усі покази одометра')}
         ${link('#/reglament', 'Регламент', 'Пункти обслуговування та інтервали — можна правити')}
         ${link('#/obmin', 'Обмін даними', 'Копія для телефона чи компа, імпорт')}
@@ -361,6 +367,40 @@ const V = (() => {
         <button class="btn ghost" data-act="share" data-src="#mText">Надіслати</button></p>
         <p class="muted small">Список складається сам зі стану вузлів. Нотатки потрапляють сюди, якщо в них позначено «до списку для майстра».</p>
       </section>`,
+    };
+  }
+
+  // ---------- Перевірити дані ----------
+  const recLink = r => r.t === 'doc' ? '#/doc/' + r.id : '#/edit/' + r.t + '/' + r.id;
+  function perevirka() {
+    const { active, ok } = M.checkList();
+    const ruleName = id => { const r = DB.get(id); return r ? r.name : 'вузол видалено'; };
+    const item = (g, isOk) => {
+      const m = g.main;
+      const title = m.t === 'doc' ? 'Документ ' + [m.code, m.seller].filter(Boolean).join(' · ')
+        : m.t === 'work' ? 'Журнал: ' + ruleName(m.rule) : m.t === 'odo' ? 'Показ пробігу' : 'Нотатка';
+      const ws = g.recs.filter(r => r.t === 'work' && r !== m);
+      const ids = e(g.recs.map(r => r.id).join(','));
+      const btn = isOk
+        ? `<button type="button" class="btn small ghost" data-act="data-back" data-ids="${ids}">Повернути до списку</button>`
+        : `<button type="button" class="btn small ghost" data-act="data-ok" data-ids="${ids}" data-codes="${e(g.codes.join(','))}">${m.t === 'note' ? 'Закрити нотатку' : 'Гаразд, так і є'}</button>`;
+      return `<div class="card st-${isOk ? 'ok' : 'soon'}">
+        <a class="card-main" href="${recLink(m)}">
+          <div class="row"><b class="grow">${e(title)}</b><span class="muted">${U.date(m.date)}</span></div>
+          ${g.why.map(w => `<div class="sub">• ${e(w)}</div>`).join('')}
+          ${ws.length ? `<div class="sub">Стосується записів у журналі: ${ws.length} (${e([...new Set(ws.map(w => ruleName(w.rule)))].slice(0, 4).join(', '))})</div>` : ''}
+        </a>
+        <div class="card-acts">${btn}${g.others.map(o => `<a class="btn small ghost" href="${recLink(o)}">Запис від ${U.date(o.date)}</a>`).join('')}</div>
+      </div>`;
+    };
+    return {
+      title: 'Перевірити дані', back: true, html: `
+      <section class="panel">
+        <p class="small">Тут зібрано, що варто уточнити: пробіг лише оцінений, позначки «уточніть», «не видно», «не вказано», покази пробігу не по порядку дат, документи, не позначені в журналі. Відкрийте пункт і виправте — уточнивши пробіг, зніміть позначку «лише оцінка» і приберіть «уточніть» з примітки.</p>
+        <p class="muted small">Якщо все так і є — «Гаразд, так і є»: пункт зникне і повернеться, лише якщо з’явиться нова причина.</p>
+      </section>
+      ${active.length ? `<div class="cards">${active.map(g => item(g, false)).join('')}</div>` : '<section class="panel"><p class="ok">Перевіряти нічого — дані в порядку.</p></section>'}
+      ${ok.length ? `<details class="more"><summary>Позначені «гаразд» (${ok.length})</summary><div class="cards">${ok.map(g => item(g, true)).join('')}</div></details>` : ''}`,
     };
   }
 
@@ -448,5 +488,5 @@ const V = (() => {
       <label class="btn small ghost">З галереї<input type="file" accept="image/*" multiple data-ocr hidden></label>`;
   }
 
-  return { stan, rule, zhurnal, docs, doc, vytraty, sche, maistru, reglament, notes, probih, obmin, nalashtuvannia, notFound, remText, intervalText, mainText, ocrButtons };
+  return { stan, rule, zhurnal, docs, doc, vytraty, sche, maistru, perevirka, reglament, notes, probih, obmin, nalashtuvannia, notFound, remText, intervalText, mainText, ocrButtons };
 })();

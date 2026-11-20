@@ -51,6 +51,7 @@ const Obmin = (() => {
   // ---------- підготовка копії ----------
   async function build(peerId, onStep) {
     const now = DB.clock();
+    const m = mark();
     const sel = select(peerId);
     const have = Object.assign({}, know());
     have[DB.device] = now;
@@ -75,13 +76,14 @@ const Obmin = (() => {
     await DB.setMeta('clock', now);
     const d = new Date(now);
     const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
-    const who = myName().replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 30);
-    const name = `кашкай_${peerId ? 'зміни' : 'копія'}_${who}_${stamp}.zip`;
+    const name = `кашкай_${peerId ? 'зміни' : 'копія'}_${who()}_${stamp}.zip`;
     return {
       file: new File([zip], name, { type: 'application/zip' }),
       sum: { records: sel.records.length, photos: entries.length - 1, peer: peerId ? (peers()[peerId] || {}).name : null },
+      mark: m,
     };
   }
+  const who = () => myName().replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 30);
 
   // Chrome, Edge, Opera (рушій Chromium) через «Поділитися» пускають лише фото, відео, PDF і текст:
   // .zip відхиляють, хоча canShare відповідає «можна» (перевірено на Poco F7, 2026-11-20).
@@ -132,7 +134,7 @@ const Obmin = (() => {
 
   async function share() {
     if (!ready) return;
-    try { await navigator.share({ files: [ready.file], title: ready.file.name }); }
+    try { await navigator.share({ files: [ready.file], title: ready.file.name }); await copied(ready.mark); }
     catch (err) {
       if (err && err.name === 'AbortError') return;   // власник передумав
       try { localStorage.setItem(NO_SHARE, '1'); } catch (x) { /* без сховища — лише цього разу */ }
@@ -153,7 +155,106 @@ const Obmin = (() => {
       msg = `У папку «${Folder.name()}» записати не вдалося — файл збережено в «Завантаження»`;
     }
     await Folder.made(f.name);
+    await copied(ready.mark);
     U.toast(msg, 5000);
+  }
+
+  // ---------- автокопія ----------
+  // Якщо вибрано папку програми і браузер пам'ятає дозвіл на неї, програма сама тримає там одну
+  // повну копію (файл перезаписується після змін) — на випадок, коли браузер стер дані чи програму видалили.
+  // Окремо пам'ятаємо, коли востаннє робили будь-яку копію (lastCopy), — для нагадування на «Стані».
+  const AUTO = 'autoCopy', LAST = 'lastCopy';
+  const AUTO_GAP = 5 * 60e3;   // не частіше ніж раз на 5 хвилин (крім згортання програми)
+  let autoTimer = null, autoErr = null;
+
+  // Відбиток даних: міняється з кожною зміною будь-якого запису чи фото (тут чи прийнятою з іншого пристрою).
+  function mark() {
+    let n = 0, s = 0;
+    for (const r of DB.allRecords()) { n++; s += r.u % 1e10; }
+    for (const f of DB.allFiles()) { n++; s += f.u % 1e10; }
+    return n + ':' + s;
+  }
+  const autoName = () => `кашкай_автокопія_${who()}_${DB.device.slice(0, 4)}.zip`;
+  const auto = () => DB.getMeta(AUTO) || null;
+  const lastCopy = () => DB.getMeta(LAST) || null;
+  const unsaved = () => { const l = lastCopy(); return !!DB.allRecords().length && (!l || l.mark !== mark()); };
+  const copied = m => DB.setMeta(LAST, { at: Date.now(), mark: m });
+
+  async function exists(h, name) {
+    try { await h.getFileHandle(name); return true; } catch (x) { return false; }
+  }
+
+  // Записати автокопію. ask=true — після натискання кнопки: можна спитати дозволу на папку, пишемо завжди.
+  // Відповідь: 'done' | 'same' (копія й так свіжа) | 'noaccess' | 'busy' | 'nofolder'.
+  async function autoRun(ask) {
+    if (!Folder.name()) return 'nofolder';
+    if (busy) return 'busy';
+    if (!DB.allRecords().length) return 'same';
+    const h = await Folder.access(ask);
+    if (!h) return 'noaccess';
+    const a = auto(), name = autoName();
+    if (!ask && a && a.mark === mark() && a.name === name && await exists(h, name)) return 'same';
+    if (busy) return 'busy';
+    busy = true;
+    try {
+      const r = await build(null);
+      const f = new File([r.file], name, { type: 'application/zip' });
+      await Folder.made(name);   // свою копію не пропонуємо «Прийняти»
+      await Folder.save(f, h);
+      const nRec = DB.allRecords().filter(x => !x.del).length;
+      await DB.setMeta(AUTO, { at: Date.now(), mark: r.mark, name, size: f.size, records: nRec, photos: r.sum.photos });
+      await copied(r.mark);
+      autoErr = null;
+      // Пристрій перейменували — стару автокопію прибираємо, щоб не плутала.
+      if (a && a.name && a.name !== name) { try { await h.removeEntry(a.name); } catch (x) { /* її вже немає */ } }
+      return 'done';
+    } catch (err) {
+      autoErr = err.message || String(err);
+      throw err;
+    } finally { busy = false; }
+  }
+
+  // Коли писати: через хвилину спокою після змін, при згортанні програми, після запуску.
+  function autoSoon(delay = 60e3) {
+    if (!Folder.name()) return;
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(() => autoTick(false), delay);
+  }
+  async function autoTick(now) {
+    clearTimeout(autoTimer);
+    autoTimer = null;
+    const a = auto();
+    if (!now && a && Date.now() - a.at < AUTO_GAP) { autoSoon(AUTO_GAP - (Date.now() - a.at) + 1000); return; }
+    try { if (await autoRun(false) === 'busy') autoSoon(); }
+    catch (err) { console.warn('Автокопію не записано', err); }
+  }
+
+  // Кнопка «Зробити копію»: у папку програми, а якщо її немає чи доступу не дали — файлом у «Завантаження».
+  async function backupNow() {
+    if (busy) return;
+    if (Folder.name()) {
+      try {
+        if (await autoRun(true) === 'done') { U.toast(`Копію записано в папку «${Folder.name()}»`, 4000); App.refresh(); return; }
+      } catch (err) { console.error(err); }
+    }
+    busy = true;
+    try {
+      const r = await build(null);
+      U.download(r.file.name, r.file);
+      await Folder.made(r.file.name);
+      await copied(r.mark);
+      U.toast('Повну копію збережено в «Завантаження». Надішліть її на інший пристрій або перенесіть на флешку.', 7000);
+    } catch (err) {
+      console.error(err);
+      U.toast('Не вдалося зробити копію: ' + err.message, 6000);
+    } finally { busy = false; }
+    App.refresh();
+  }
+
+  // Перший запуск з автокопією: відлік «давно не було копії» починаємо з сьогодні.
+  async function init() {
+    if (!lastCopy()) await DB.setMeta(LAST, { at: Date.now(), mark: null });
+    autoSoon(5000);
   }
 
   // ---------- папка програми ----------
@@ -191,12 +292,14 @@ const Obmin = (() => {
     try {
       const h = await Folder.choose();
       if (!h) return;
+      await DB.setMeta(AUTO, null);   // автокопія — відтепер у новій папці
       U.toast(`Папка «${h.name}» вибрана`, 4000);
     } catch (err) {
       console.error(err);
       U.toast('Цю папку вибрати не можна — створіть у «Завантаженнях» папку «Кашкай» і виберіть її', 7000);
     }
     App.refresh();
+    autoSoon(3000);   // дозвіл щойно дано — першу автокопію пишемо одразу
   }
   async function forgetFolder() {
     if (!confirm(`Більше не використовувати папку «${Folder.name()}»? Файли в ній лишаться, нові ляжуть у «Завантаження».`)) return;
@@ -350,22 +453,35 @@ const Obmin = (() => {
   function folderPanel() {
     if (!Folder.supported()) return '';
     const n = Folder.name();
-    return n
-      ? `<section class="panel">
+    if (!n) {
+      return `<section class="panel">
+        <h3>Окрема папка для файлів</h3>
+        <p class="muted small">Щоб не шукати файли серед усіх завантажень: натисніть «Вибрати папку», відкрийте «Завантаження» (Download), створіть там папку <b>Кашкай</b> і виберіть її. Тоді копії й таблиці лягатимуть туди, отримані файли програма покаже сама, а ще триматиме там свіжу резервну копію всіх даних.</p>
+        <p class="actions"><button class="btn ghost" data-act="folder-choose">Вибрати папку</button></p>
+      </section>`;
+    }
+    const a = auto();
+    const state = a
+      ? `записана ${when(a.at)} · ${size(a.size)} · записів ${a.records}, фото ${a.photos}${a.mark !== mark() ? '<br><span class="sub">Є новіші зміни — програма допише їх сама за кілька хвилин.</span>' : ''}`
+      : 'ще не записувалась';
+    return `<section class="panel">
         <h3>Папка програми: «${e(n)}»</h3>
         <p class="muted small">Сюди лягають копії й таблиці Excel, а отримані файли з неї програма показує вище — шукати не треба. Щоб LocalSend клав отримане сюди ж: LocalSend → «Налаштування» → папка для отриманих файлів → «${e(n)}».</p>
         <p class="actions"><button class="btn ghost small" data-act="folder-choose">Вибрати іншу</button>
           <button class="btn ghost small" data-act="folder-forget">Не використовувати</button></p>
-      </section>`
-      : `<section class="panel">
-        <h3>Окрема папка для файлів</h3>
-        <p class="muted small">Щоб не шукати файли серед усіх завантажень: натисніть «Вибрати папку», відкрийте «Завантаження» (Download), створіть там папку <b>Кашкай</b> і виберіть її. Тоді копії й таблиці лягатимуть туди, а отримані файли програма покаже сама.</p>
-        <p class="actions"><button class="btn ghost" data-act="folder-choose">Вибрати папку</button></p>
+      </section>
+      <section class="panel">
+        <h3>Автокопія</h3>
+        <p>${state}</p>
+        ${autoErr ? `<p class="err small">Остання спроба не вдалася: ${e(autoErr)}</p>` : ''}
+        <p class="muted small">Програма сама тримає в папці «${e(n)}» повну копію даних з фото — файл «${e(autoName())}», він перезаписується після змін. Якщо браузер стер дані чи програму перевстановили — прийміть цей файл. Від втрати телефона рятує інше: час від часу надсилайте зміни на комп.</p>
+        <p class="actions"><button class="btn small" data-act="backup-now">Записати копію зараз</button></p>
       </section>`;
   }
 
   return {
     screen, make, share, save, rename, importFile, readCopy, build, select,
     fillFolder, importFromFolder, chooseFolder, forgetFolder, isBusy: () => busy,
+    init, autoSoon, autoTick, backupNow, lastCopy, unsaved, auto,
   };
 })();

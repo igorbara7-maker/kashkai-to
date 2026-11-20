@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.8.0';
+  const VERSION = '0.9.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -31,6 +31,7 @@ const App = (() => {
         case 'vytraty': r = V.vytraty(); break;
         case 'sche': r = V.sche(); break;
         case 'maistru': r = V.maistru(); break;
+        case 'perevirka': r = V.perevirka(); break;
         case 'reglament': r = V.reglament(); break;
         case 'notes': r = V.notes(); break;
         case 'probih': r = V.probih(); break;
@@ -49,6 +50,7 @@ const App = (() => {
     const tab = a === 'edit' ? (TAB_OF_EDIT[b] || 'sche') : (TAB_OF[a] || 'sche');
     render(r, tab);
     if (waiting) applyUpdate();
+    Obmin.autoSoon();
   }
 
   function render(r, tab) {
@@ -219,6 +221,18 @@ const App = (() => {
     route();
   }
 
+  // «Перевірити дані»: «Гаразд» — запис лишається як є і зникає зі списку (поки не з’явиться нова причина);
+  // «Повернути» — знову в списку. Нотатку «Гаразд» закриває.
+  async function dataOk(ids, codes) {
+    const recs = String(ids || '').split(',').map(id => DB.get(id)).filter(Boolean);
+    if (!recs.length) return;
+    const ok = codes ? codes.split(',') : null;
+    await DB.saveAll(recs.map(r => r.t === 'note' ? Object.assign({}, r, { done: !!ok })
+      : Object.assign({}, r, { ok: ok ? [...new Set([...(r.ok || []), ...ok])] : null })));
+    U.toast(ok ? 'Позначено: гаразд' : 'Повернуто до списку');
+    route();
+  }
+
   async function copyText(text) {
     try { await navigator.clipboard.writeText(text); U.toast('Скопійовано'); }
     catch (x) { U.toast('Не вдалося скопіювати — виділіть текст вручну'); }
@@ -275,6 +289,9 @@ const App = (() => {
       case 'folder-forget': Obmin.forgetFolder(); break;
       case 'folder-show': Obmin.fillFolder(true); break;
       case 'folder-import': Obmin.importFromFolder(+el.dataset.i); break;
+      case 'backup-now': Obmin.backupNow(); break;
+      case 'data-ok': dataOk(el.dataset.ids, el.dataset.codes); break;
+      case 'data-back': dataOk(el.dataset.ids, null); break;
       case 'share-doc': {
         if (!shared.length) break;
         F.setPending(shared.slice());
@@ -397,6 +414,12 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.9.0': [
+      'Автокопія: якщо вибрано папку програми (Ще → Обмін даними), програма сама тримає в ній свіжу повну копію даних з фото — один файл, він перезаписується після змін.',
+      'Якщо резервної копії не було понад тиждень, а зміни є, — на головному екрані з’явиться нагадування з кнопкою «Зробити копію».',
+      'Ще → «Перевірити дані»: оцінений пробіг, позначки «уточніть», пробіг не по порядку дат, документи, не позначені в журналі. Виправте або позначте «Гаразд, так і є».',
+      'У документі тепер теж можна позначити «Пробіг — лише оцінка».',
+    ],
     '0.8.0': [
       'Ярлики: натисніть і потримайте значок програми — «Пробіг», «Документ», «Робота» відкриваються одразу.',
       'Фото можна надіслати в програму з галереї чи камери: «Поділитися» → «Кашкай ТО» — новий документ або додати до наявного.',
@@ -452,6 +475,9 @@ const App = (() => {
     showNews();
     serviceWorker();
     DB.persist();
+    Obmin.init().catch(err => console.warn(err));
+    // Згортають програму — дописуємо автокопію, поки є змога.
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') Obmin.autoTick(true); });
   }
 
   return { VERSION, init, showPhotos, refresh: () => route() };
