@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.12.0';
+  const VERSION = '0.13.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -56,6 +56,7 @@ const App = (() => {
     render(r, tab);
     if (waiting) applyUpdate();
     Obmin.autoSoon();
+    Cloud.soon();
   }
 
   function render(r, tab) {
@@ -309,6 +310,10 @@ const App = (() => {
       case 'folder-show': Obmin.fillFolder(true); break;
       case 'folder-import': Obmin.importFromFolder(+el.dataset.i); break;
       case 'backup-now': Obmin.backupNow(); break;
+      case 'cloud-sync': Cloud.sync(true); break;
+      case 'cloud-client': Cloud.saveClient(); break;
+      case 'cloud-off': Cloud.disconnect(); break;
+      case 'cloud-restart': Cloud.restart(); break;
       case 'ics': P.ics(); break;
       case 'data-ok': dataOk(el.dataset.ids, el.dataset.codes); break;
       case 'data-back': dataOk(el.dataset.ids, null); break;
@@ -380,6 +385,7 @@ const App = (() => {
   });
 
   document.addEventListener('submit', async ev => {
+    if (ev.target.id === 'cloudPw') { ev.preventDefault(); Cloud.submitPw(); return; }
     const form = ev.target.closest('form[data-form]');
     if (!form) return;
     ev.preventDefault();
@@ -399,7 +405,7 @@ const App = (() => {
   // Інакше — смужка, і оновлення відбудеться після закриття форми.
   let waiting = null, reg = null, lastCheck = Date.now();
   const safeNow = () => !busy && !document.querySelector('form[data-form]') && $('sheet').classList.contains('hidden')
-    && !Obmin.isBusy() && !Excel.isBusy();
+    && !Obmin.isBusy() && !Excel.isBusy() && !Cloud.isBusy();
   function applyUpdate(force) {
     if (!waiting || !(force || safeNow())) return false;
     waiting.postMessage('skipWaiting');
@@ -435,6 +441,11 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.13.0': [
+      'Обмін через Google Диск: Ще → «Обмін даними» → «Підключити Google Диск». Кожен пристрій кладе свої дані на ваш Google Диск і бере звідти зміни інших — файли переносити не треба.',
+      'Файли на Диску зашифровані вашим паролем: на першому пристрої його придумуєте, на інших — вводите один раз. Програма бачить на Диску лише свою папку.',
+      'Після змін натисніть «Обмінятися зараз»; ще близько години після того програма обмінюється сама. Обмін файлами через LocalSend і автокопія в папку працюють, як і раніше.',
+    ],
     '0.12.0': [
       'Поїздки: Ще → «Поїздки» → «Почати поїздку» (назва, дата, пробіг, за бажанням — рівень пального). Поки поїздка триває, на головному екрані — кнопки «Заправка» і «Витрата на авто», а заправки й витрати тих днів зараховуються до неї самі.',
       'Підсумок поїздки: пробіг, витрата пального саме в цій поїздці (з рівнем у баку на старті й фініші — точна), скільки пішло на машину — усього, на день і на 1 км. Підсумок можна надіслати текстом.',
@@ -504,6 +515,9 @@ const App = (() => {
       $('view').innerHTML = `<section class="panel"><h2>Не вдалося відкрити дані</h2><p class="err">${U.esc(err.message)}</p></section>`;
       return;
     }
+    // Повернулися зі сторінки входу Google — забрати дозвіл з адреси до першого показу екрана.
+    let cloudRet = null;
+    try { cloudRet = await Cloud.catchReturn(); } catch (err) { console.error(err); }
     window.addEventListener('hashchange', ev => {
       const old = ev.oldURL.indexOf('#') >= 0 ? ev.oldURL.slice(ev.oldURL.indexOf('#')) : '';
       scrollPos.set(old, window.scrollY);
@@ -516,6 +530,7 @@ const App = (() => {
     serviceWorker();
     DB.persist();
     Obmin.init().catch(err => console.warn(err));
+    Cloud.init(cloudRet);
     // Згортають програму — дописуємо автокопію, поки є змога.
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') Obmin.autoTick(true); });
   }

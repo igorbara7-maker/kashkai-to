@@ -49,13 +49,25 @@ const Obmin = (() => {
   }
 
   // ---------- підготовка копії ----------
-  async function build(peerId, onStep) {
+  // Дані копії без фото (files заповнює той, хто знає, де лежатимуть фото: архів чи Google Диск).
+  // Після успішного запису копії викличте DB.setMeta('clock', now).
+  function payload(peerId) {
     const now = DB.clock();
-    const m = mark();
     const sel = select(peerId);
     const have = Object.assign({}, know());
     have[DB.device] = now;
-    const entries = [], files = [];
+    const data = {
+      app: 'kashkai-to', format: FORMAT, created: new Date(now).toISOString(),
+      device: DB.device, deviceName: myName(), have, base: sel.base, for: peerId || null,
+      records: sel.records, files: [],
+    };
+    return { now, sel, data };
+  }
+
+  async function build(peerId, onStep) {
+    const m = mark();
+    const { now, sel, data } = payload(peerId);
+    const entries = [], files = data.files;
     for (const f of sel.files) {
       const { size: _s, ...m } = f;
       if (!f.del) {
@@ -66,11 +78,6 @@ const Obmin = (() => {
       }
       files.push(m);
     }
-    const data = {
-      app: 'kashkai-to', format: FORMAT, created: new Date(now).toISOString(),
-      device: DB.device, deviceName: myName(), have, base: sel.base, for: peerId || null,
-      records: sel.records, files,
-    };
     entries.unshift({ name: DATA, data: JSON.stringify(data) });
     const zip = await Zip.write(entries, onStep);
     await DB.setMeta('clock', now);
@@ -332,6 +339,15 @@ const Obmin = (() => {
     } else {
       try { data = JSON.parse(await file.text()); } catch (x) { throw new Error('Це не файл копії програми «Кашкай ТО».'); }
     }
+    return mergeData(data, f => {
+      if (zip && f.path) return zip.blob(f.path, f.mime || 'image/jpeg');
+      if (f.data) return b64ToBlob(f.data, f.mime);
+      throw new Error('фото немає в копії');
+    }, onStep);
+  }
+
+  // Злити дані копії з цього пристрою. getBlob(відомості про фото) → Blob — звідки взяти саме фото.
+  async function mergeData(data, getBlob, onStep) {
     if (!data || data.app !== 'kashkai-to' || !Array.isArray(data.records)) throw new Error('Це не файл копії програми «Кашкай ТО».');
     if (data.format > FORMAT) throw new Error('Копію зроблено новішою версією програми — спершу оновіть програму на цьому пристрої (Ще → Налаштування).');
 
@@ -344,10 +360,7 @@ const Obmin = (() => {
       if (f.del) { files.push(f); continue; }
       if (!DB.wantsFile(f)) continue;
       try {
-        let blob;
-        if (zip && f.path) blob = await zip.blob(f.path, f.mime || 'image/jpeg');
-        else if (f.data) blob = b64ToBlob(f.data, f.mime);
-        else throw new Error('фото немає в копії');
+        const blob = await getBlob(f);
         const { path: _p, data: _d, size: _s, ...m } = f;
         files.push(Object.assign(m, { blob }));
       } catch (x) { console.warn('Фото не взято', f.id, x); bad++; }
@@ -430,8 +443,9 @@ const Obmin = (() => {
     opts += opt('', 'Повна копія', `записів ${nRec}, фото ${all.photos.length}${all.bytes ? ', ≈ ' + size(all.bytes) : ''}`, !ps.length);
     return {
       title: 'Обмін даними', back: true, html: `
+      ${Cloud.panel()}
       <section class="panel">
-        <h3>Надіслати на інший пристрій</h3>
+        <h3>Надіслати файлом на інший пристрій</h3>
         <p class="muted small">Цей пристрій: <b>${e(myName())}</b> · <button type="button" class="linkbtn" data-act="dev-rename">змінити назву</button></p>
         <div class="choices">${opts}</div>
         ${ps.length ? '' : '<p class="muted small">Перший раз надішліть повну копію. Коли інший пристрій надішле свою копію сюди, з\'явиться «лише зміни» — це менший файл.</p>'}
@@ -446,7 +460,7 @@ const Obmin = (() => {
         <div id="importRes"></div>
       </section>
       ${folderPanel()}`,
-      after: () => fillFolder(false),
+      after: () => { Cloud.after(); return fillFolder(false); },
     };
   }
 
@@ -480,8 +494,8 @@ const Obmin = (() => {
   }
 
   return {
-    screen, make, share, save, rename, importFile, readCopy, build, select,
+    screen, make, share, save, rename, importFile, readCopy, build, select, payload, mergeData,
     fillFolder, importFromFolder, chooseFolder, forgetFolder, isBusy: () => busy,
-    init, autoSoon, autoTick, backupNow, lastCopy, unsaved, auto,
+    init, autoSoon, autoTick, backupNow, lastCopy, unsaved, auto, mark, copied, myName, when, size,
   };
 })();

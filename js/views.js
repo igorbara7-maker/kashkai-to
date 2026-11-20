@@ -95,7 +95,7 @@ const V = (() => {
           <div class="big">${U.km(ctx.nowKm, ctx.nowEst)}</div>
           <div class="muted small">${cur ? 'Останній показ: ' + U.km(cur.km) + ' на ' + U.date(cur.date) : 'Пробіг ще не записано'}${ctx.r ? ' · ≈ ' + U.int(ctx.r * 365) + ' км на рік' : ''}</div>
         </div><a class="btn" href="#/edit/odo/new">Пробіг</a></div>
-        ${odoNote}${copyNote}
+        ${odoNote}${Cloud.on() ? Cloud.note() : copyNote}
       </section>`;
     const card = o => {
       if (o.tires) return T.card(o.tires);
@@ -366,7 +366,7 @@ const V = (() => {
         ${link('#/dribni', 'Дрібні витрати', 'Мийка, стоянка, платна дорога, доливання')}
         ${link('#/probih', 'Пробіг', 'Усі покази одометра')}
         ${link('#/reglament', 'Регламент', 'Пункти обслуговування та інтервали — можна правити')}
-        ${link('#/obmin', 'Обмін даними', 'Копія для телефона чи компа, імпорт')}
+        ${link('#/obmin', 'Обмін даними', 'Google Диск, файл для телефона чи компа, імпорт')}
         ${link('#/excel', 'Таблиця Excel', 'Усі дані одним файлом — переглянути, роздрукувати, надіслати')}
         ${link('#/nalashtuvannia', 'Налаштування', 'Автомобіль, попередження, сховище')}
       </div>`,
