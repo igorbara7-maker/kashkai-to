@@ -7,8 +7,24 @@ const V = (() => {
     const a = [];
     if (r.km) a.push('кожні ' + U.int(r.km) + ' км');
     if (r.months) a.push((r.km ? '' : 'кожні ') + r.months + ' міс');
+    const s = M.seasonDates(r.season);
+    if (s.length) a.push('щороку до ' + s.map(([m, d]) => String(d).padStart(2, '0') + '.' + String(m).padStart(2, '0')).join(' і '));
     return a.length ? a.join(' або ') : 'за станом';
   }
+
+  // Одна головна фраза для картки: що з вузлом зараз.
+  function mainText(o) {
+    if (o.st === 'nodata') return 'Записів немає — ' + intervalText(o.rule);
+    if (o.st === 'state') return o.lastDate ? 'Востаннє ' + U.date(o.lastDate) : 'За станом, записів немає';
+    const a = [];
+    if (o.remKm != null && (o.remKm < 0 || o.st !== 'over')) a.push(o.remKm >= 0 ? 'через ' + U.km(o.remKm, o.remKmEst) : 'перебіг ' + U.km(-o.remKm, o.remKmEst));
+    if (o.remDays != null && (o.remDays < 0 || o.st !== 'over')) {
+      a.push(o.remDays >= 0 ? 'до ' + U.date(o.dueDate) + (o.remDays <= 60 ? ' (' + U.daysText(o.remDays) + ')' : '')
+        : 'строк минув ' + U.daysText(-o.remDays) + ' тому');
+    }
+    return a.join(' або ').replace(/^перебіг (.*) або строк/, 'перебіг $1, строк');
+  }
+  const isCheckRule = r => /огляд|перевір|змащ|стан/i.test(r.action || '');
 
   function remText(o) {
     const a = [];
@@ -46,26 +62,51 @@ const V = (() => {
         </section>`,
       };
     }
-    const cnt = { over: 0, soon: 0, nodata: 0 };
-    list.forEach(o => { if (o.st in cnt) cnt[o.st]++; });
-    const pills = Object.keys(cnt).filter(k => cnt[k]).map(k => `<span class="pill st-${k}">${M.ST[k]}: ${cnt[k]}</span>`).join('');
     const cur = ctx.cur;
+    const grp = { over: [], soon: [], nodata: [], later: [], ok: [] };
+    list.forEach(o => grp[o.snoozed && /over|soon|nodata/.test(o.st) ? 'later' : o.st === 'state' ? 'ok' : o.st].push(o));
+    // Висновок одним реченням.
+    const names = arr => arr.slice(0, 3).map(o => o.rule.name.replace(/\s*\(.*\)$/, '')).join(', ') + (arr.length > 3 ? ' та ще ' + (arr.length - 3) : '');
+    const near = list.filter(o => o.st === 'ok' && o.remDays != null).sort((a, b) => a.remDays - b.remDays)[0];
+    let verdict;
+    if (grp.over.length) verdict = `<div class="verdict st-over">Прострочено: ${grp.over.length}</div><div class="sub">${e(names(grp.over))}</div>`;
+    else if (grp.soon.length) verdict = `<div class="verdict st-soon">Незабаром: ${e(grp.soon[0].rule.name)}</div><div class="sub">${mainText(grp.soon[0])}${grp.soon.length > 1 ? ' · і ще ' + (grp.soon.length - 1) : ''}</div>`;
+    else verdict = `<div class="verdict st-ok">Усе гаразд</div>${near ? `<div class="sub">Найближче: ${e(near.rule.name)} — ${mainText(near)}</div>` : ''}`;
+    // Давно не записували пробіг — від нього залежать усі строки.
+    const odoAge = cur ? U.days(cur.date, ctx.today) : null;
+    const odoNote = odoAge != null && odoAge > 30 ? `<div class="hint">Пробіг не записували ${U.daysText(odoAge)} — строки рахуються за оцінкою. <a href="#/edit/odo/new">Записати</a></div>` : '';
     const head = `
       <section class="panel">
-        <div class="row"><div class="grow">
+        ${verdict}
+        <div class="row km-row"><div class="grow">
           <div class="big">${U.km(ctx.nowKm, ctx.nowEst)}</div>
-          <div class="muted">${cur ? 'Останній показ: ' + U.km(cur.km) + ' на ' + U.date(cur.date) : 'Пробіг ще не записано'}${ctx.r ? ' · ≈ ' + U.int(ctx.r * 365) + ' км на рік' : ''}</div>
+          <div class="muted small">${cur ? 'Останній показ: ' + U.km(cur.km) + ' на ' + U.date(cur.date) : 'Пробіг ще не записано'}${ctx.r ? ' · ≈ ' + U.int(ctx.r * 365) + ' км на рік' : ''}</div>
         </div><a class="btn" href="#/edit/odo/new">Пробіг</a></div>
-        ${pills ? '<div class="pills">' + pills + '</div>' : '<div class="pills"><span class="pill st-ok">Усе гаразд</span></div>'}
+        ${odoNote}
       </section>`;
-    const cards = list.map(o => `
-      <a class="card st-${o.st}" href="#/rule/${e(o.rule.id)}">
-        <div class="row"><b class="grow">${e(o.rule.name)}</b><span class="badge">${M.ST[o.st]}</span></div>
-        <div class="sub">${e(o.rule.action || '')}${o.rule.action ? ' · ' : ''}${intervalText(o.rule)}</div>
-        <div class="sub">${lastText(o)}</div>
-        ${remText(o) ? `<div class="sub strong">${remText(o)}</div>` : ''}
-      </a>`).join('');
-    return { title: 'Стан', html: head + '<div class="cards">' + cards + '</div>' };
+    const card = o => {
+      const id = e(o.rule.id), st = o.snoozed ? 'later' : o.st;
+      const meter = o.used != null ? `<div class="meter" title="Використано ресурсу: ${Math.round(o.used * 100)}%"><i style="width:${Math.min(100, Math.max(3, o.used * 100)).toFixed(0)}%"></i></div>` : '';
+      const acts = /over|soon|nodata/.test(o.st) ? `<div class="card-acts">
+          <a class="btn small" href="#/edit/visit/new?rule=${id}">Зроблено</a>
+          ${isCheckRule(o.rule) ? `<button type="button" class="btn small ghost" data-act="quick-check" data-id="${id}">Перевірено</button>` : ''}
+          <button type="button" class="btn small ghost" data-act="snooze" data-id="${id}">${o.snoozed ? 'Відкладено' : 'Пізніше'}</button></div>` : '';
+      return `<div class="card st-${st}">
+        <a class="card-main" href="#/rule/${id}">
+          <b>${e(o.rule.name)}</b>
+          <div class="main-line">${o.snoozed ? 'Відкладено до ' + U.date(o.snoozed) + ' · ' : ''}${mainText(o)}</div>
+          ${meter}
+          ${o.lastDate && o.st !== 'state' ? `<div class="sub">${lastText(o)}</div>` : ''}
+        </a>${acts}</div>`;
+    };
+    const block = (k, title) => grp[k].length ? `<h3 class="sec">${title} (${grp[k].length})</h3><div class="cards">${grp[k].map(card).join('')}</div>` : '';
+    const rest = grp.later.length + grp.ok.length;
+    return {
+      title: 'Стан', noTopKm: true, html: head
+        + block('over', 'Прострочено') + block('soon', 'Незабаром') + block('nodata', 'Немає даних')
+        + (rest ? `<details class="more"${grp.over.length + grp.soon.length + grp.nodata.length ? '' : ' open'}><summary>Гаразд і відкладене (${rest})</summary>`
+          + block('later', 'Відкладено') + block('ok', 'Гаразд') + '</details>' : ''),
+    };
   }
 
   // ---------- Вузол (пункт регламенту) ----------
@@ -87,7 +128,10 @@ const V = (() => {
         <dt>Востаннє</dt><dd>${o.lastDate ? U.date(o.lastDate) + (o.lastKm != null ? ' · ' + U.km(o.lastKm, o.lastKmEst) : '') : '—'}</dd>`;
       if (o.nextKm != null || o.nextDate) st += `<dt>Наступне</dt><dd>${[o.nextKm != null ? U.km(o.nextKm) : '', o.nextDate ? U.date(o.nextDate) : ''].filter(Boolean).join(' або ')}</dd>`;
       if (remText(o)) st += `<dt>Залишилось</dt><dd>${remText(o)}</dd>`;
+      if (o.snoozed) st += `<dt>Відкладено</dt><dd>до ${U.date(o.snoozed)}</dd>`;
     }
+    const seasonHint = /шин/i.test(r.name) && !M.seasonDates(r.season).length
+      ? `<p class="hint">Можна вказати дати сезонної заміни (наприклад, 01.11, 01.04) і прибрати інтервал у місяцях — тоді програма нагадуватиме саме перед сезоном. Натисніть «Змінити пункт».</p>` : '';
     const hist = ws.length ? ws.map(w => `
       <a class="item" href="#/edit/work/${e(w.id)}">
         <div class="row"><b>${U.date(w.date)}</b><span class="muted">${w.km != null ? U.km(w.km, w.kmEst) : ''}</span><span class="grow"></span><span class="muted">${e(docLabel(w.doc))}</span></div>
@@ -99,7 +143,10 @@ const V = (() => {
       <section class="panel ${r.group ? '' : 'st-' + o.st} edge">
         <h2>${e(r.name)}</h2>
         <dl class="kv">${st}${kv}</dl>
+        ${seasonHint}
         <p class="actions"><a class="btn" href="#/edit/visit/new?rule=${e(id)}">Записати виконання</a>
+        ${!r.group && isCheckRule(r) ? `<button type="button" class="btn ghost" data-act="quick-check" data-id="${e(id)}">Перевірено — гаразд</button>` : ''}
+        ${!r.group && o.st !== 'state' && o.st !== 'ok' || o.snoozed ? `<button type="button" class="btn ghost" data-act="snooze" data-id="${e(id)}">${o.snoozed ? 'Відкладено' : 'Нагадати пізніше'}</button>` : ''}
         <a class="btn ghost" href="#/edit/rule/${e(id)}">Змінити пункт</a></p>
       </section>
       <h3 class="sec">Історія (${ws.length})</h3>
@@ -401,5 +448,5 @@ const V = (() => {
       <label class="btn small ghost">З галереї<input type="file" accept="image/*" multiple data-ocr hidden></label>`;
   }
 
-  return { stan, rule, zhurnal, docs, doc, vytraty, sche, maistru, reglament, notes, probih, obmin, nalashtuvannia, notFound, remText, intervalText, ocrButtons };
+  return { stan, rule, zhurnal, docs, doc, vytraty, sche, maistru, reglament, notes, probih, obmin, nalashtuvannia, notFound, remText, intervalText, mainText, ocrButtons };
 })();

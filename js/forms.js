@@ -19,7 +19,7 @@ const F = (() => {
           `<option value="${e(o.v)}"${String(o.v) === String(val ?? '') ? ' selected' : ''}>${e(o.l)}</option>`).join('') + '</select>';
         break;
       case 'number':
-        inp = `<input id="${id}" name="${f.k}" type="text" inputmode="${f.mode || 'decimal'}" autocomplete="off" value="${e(numIn(val))}"${req}>`;
+        inp = `<input id="${id}" name="${f.k}" type="text" inputmode="${f.mode || 'decimal'}" autocomplete="off" value="${e(numIn(val))}"${f.ph ? ` placeholder="${e(f.ph)}"` : ''}${req}>`;
         break;
       default:
         inp = `<input id="${id}" name="${f.k}" type="${f.type || 'text'}" autocomplete="off" value="${e(val ?? '')}"${f.list ? ` list="${id}_l"` : ''}${req}>`
@@ -44,6 +44,9 @@ const F = (() => {
     v: d.id, l: [d.code, U.date(d.date), d.seller || d.kind].filter(Boolean).join(' · '),
   })));
   const ruleOpts = () => M.rules().map(r => ({ v: r.id, l: r.name }));
+
+  // Оцінка пробігу на сьогодні — сірою підказкою в порожньому полі.
+  function odoGuess() { const x = M.kmAt(U.today()); return x ? 'сьогодні ≈ ' + U.int(x.km) : ''; }
 
   // Перевірка пробігу на узгодженість з іншими показами.
   function kmOk(date, km) {
@@ -89,7 +92,7 @@ const F = (() => {
       title: 'Показ пробігу', t: 'odo',
       fields: () => [
         { k: 'date', label: 'Дата', type: 'date', req: true },
-        { k: 'km', label: 'Пробіг, км', type: 'number', mode: 'numeric', req: true },
+        { k: 'km', label: 'Пробіг, км', type: 'number', mode: 'numeric', req: true, ph: odoGuess() },
         { k: 'src', label: 'Звідки', type: 'text', hint: 'одометр, акт, чек…' },
       ],
       defaults: () => ({ date: U.today(), src: 'Одометр' }),
@@ -105,6 +108,7 @@ const F = (() => {
         { k: 'action', label: 'Що робити', type: 'text', list: ['Заміна', 'Огляд', 'Перевірка', 'Змащення', 'Обслуговування', 'Заміна за станом'] },
         { k: 'km', label: 'Інтервал, км', type: 'number', mode: 'numeric', hint: 'порожньо — без інтервалу' },
         { k: 'months', label: 'Інтервал, місяців', type: 'number', mode: 'numeric' },
+        { k: 'season', label: 'Щороку до дат', type: 'text', hint: 'ДД.ММ через кому, напр. 01.11, 01.04 — сезонна заміна шин' },
         { k: 'heavy', label: 'Важкі умови', type: 'text', hint: 'для довідки' },
         { k: 'source', label: 'Джерело', type: 'text' },
         { k: 'note', label: 'Примітка', type: 'textarea', rows: 2 },
@@ -149,6 +153,8 @@ const F = (() => {
     else rec = type === 'vehicle' ? M.vehicle() : DB.get(id);
     if (!rec) return V.notFound();
     return {
+      // Новий показ пробігу — одразу курсор у полі (на телефоні відкриється цифрова клавіатура).
+      after: isNew && type === 'odo' ? () => { const el = document.getElementById('f_km'); if (el) el.focus(); } : null,
       title: def.title, back: true, form: true, html: `
       <form class="panel form" data-form="${type}" data-id="${isNew ? '' : e(id)}">
         ${def.fields().map(f => field(f, rec[f.k])).join('')}

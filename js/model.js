@@ -88,13 +88,21 @@ const M = (() => {
       if (last.km != null) { o.lastKm = last.km; o.lastKmEst = !!last.kmEst; }
       else { const e = kmAt(last.date, ctx.pts); if (e) { o.lastKm = e.km; o.lastKmEst = e.est; } }
     }
-    if (!rule.km && !rule.months) { o.st = 'state'; return o; }
+    if (rule.snooze && rule.snooze > ctx.today) o.snoozed = rule.snooze;
+    if (!rule.km && !rule.months && !seasonDates(rule.season).length) { o.st = 'state'; return o; }
     if (!last) { o.st = 'nodata'; return o; }
     if (rule.km && o.lastKm != null) {
       o.nextKm = o.lastKm + rule.km;
       if (ctx.nowKm != null) { o.remKm = o.nextKm - ctx.nowKm; o.remKmEst = ctx.nowEst; }
     }
     if (rule.months) o.nextDate = U.addMonths(o.lastDate, rule.months);
+    const sd = nextSeason(rule.season, o.lastDate);
+    if (sd && (!o.nextDate || sd < o.nextDate)) { o.nextDate = sd; o.bySeason = true; }
+    // Яку частку ресурсу вже використано (1 — час міняти): за пробігом чи за часом — що більше.
+    const fr = [];
+    if (rule.km && o.lastKm != null && ctx.nowKm != null) fr.push((ctx.nowKm - o.lastKm) / rule.km);
+    if (o.nextDate) { const span = U.days(o.lastDate, o.nextDate); if (span > 0) fr.push(U.days(o.lastDate, ctx.today) / span); }
+    if (fr.length) o.used = Math.max(0, ...fr);
     let kmDate = null;
     if (o.nextKm != null && ctx.cur && ctx.r) kmDate = U.addDays(ctx.cur.date, (o.nextKm - ctx.cur.km) / ctx.r);
     o.dueDate = [o.nextDate, kmDate].filter(Boolean).sort()[0] || null;
@@ -105,6 +113,25 @@ const M = (() => {
     else if ((o.remKm != null && o.remKm <= v.warnKm) || (o.remDays != null && o.remDays <= v.warnDays)) o.st = 'soon';
     else o.st = 'ok';
     return o;
+  }
+
+  // Сезонні строки: «01.11, 01.04» — щороку до цих дат (шини, омивач…).
+  function seasonDates(s) {
+    return (String(s || '').match(/\d{1,2}\.\d{1,2}/g) || []).map(x => { const [d, m] = x.split('.').map(Number); return [m, d]; })
+      .filter(([m, d]) => m >= 1 && m <= 12 && d >= 1 && d <= 31);
+  }
+  // Найближча сезонна дата після виконання. Зроблене до 60 днів раніше строку зараховується до нього
+  // (зимову гуму поставили 28.10 — наступний строк 01.04, а не 01.11).
+  function nextSeason(s, after) {
+    const ds = seasonDates(s);
+    if (!ds.length || !after) return null;
+    const from = U.addDays(after, 60), y = +from.slice(0, 4);
+    let best = null;
+    for (const yy of [y, y + 1]) for (const [m, d] of ds) {
+      const x = yy + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      if (x > from && (!best || x < best)) best = x;
+    }
+    return best;
   }
 
   function allStatus(ctx = context()) {
@@ -269,6 +296,6 @@ const M = (() => {
 
   return {
     ST, CATS, DOC_KINDS, vehicle, rules, works, odos, docs, notes, points, current, rate, kmAt,
-    context, status, allStatus, docTotal, nextDocCode, expenses, yearKm, totalKm, docRules, used, usedCats,
+    context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, yearKm, totalKm, docRules, used, usedCats,
   };
 })();

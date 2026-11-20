@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.6.0';
+  const VERSION = '0.7.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -58,7 +58,7 @@ const App = (() => {
     document.querySelectorAll('#tabs a').forEach(x => x.classList.toggle('on', x.dataset.tab === tab));
     $('fab').hidden = !!r.form;
     const ctx = M.context();
-    $('topKm').textContent = ctx.nowKm != null ? U.km(ctx.nowKm, ctx.nowEst) : '';
+    $('topKm').textContent = ctx.nowKm != null && !r.noTopKm ? U.km(ctx.nowKm, ctx.nowEst) : '';
     window.scrollTo(0, scrollPos.get(location.hash) || 0);
     if (r.after) Promise.resolve(r.after()).catch(err => console.error(err));
   }
@@ -128,6 +128,44 @@ const App = (() => {
     $('sheet').classList.add('full');
   }
 
+  // ---------- швидкі дії на картці вузла ----------
+  function quickCheck(id) {
+    const r = DB.get(id);
+    if (!r) return;
+    openSheet(`<h3>${U.esc(r.name)}</h3>
+      <p>Записати: <b>перевірено сьогодні (${U.date(U.today())}), усе гаразд</b>.</p>
+      <label class="fld"><span class="muted small">Примітка, якщо треба</span><input id="qcNote" autocomplete="off" placeholder="напр. заряд 12,6 В"></label>
+      <div class="actions"><button class="btn" data-act="quick-check-save" data-id="${U.esc(id)}">Записати</button>
+      <button class="btn ghost" data-act="sheet-close">Скасувати</button></div>`);
+  }
+  async function quickCheckSave(id) {
+    const note = ($('qcNote') && $('qcNote').value.trim()) || null;
+    await DB.save({ t: 'work', date: U.today(), km: null, rule: id, what: 'Перевірено — гаразд', note });
+    const r = DB.get(id);
+    if (r && r.snooze) await DB.save(Object.assign({}, r, { snooze: null }));
+    closeSheet();
+    U.toast('Записано. Запис можна змінити чи видалити в історії вузла.', 4000);
+    route();
+  }
+  function snooze(id) {
+    const r = DB.get(id);
+    if (!r) return;
+    const opt = (days, t) => `<button class="item" data-act="snooze-set" data-id="${U.esc(id)}" data-days="${days}"><b>${t}</b><div class="sub">до ${U.date(U.addDays(U.today(), days))}</div></button>`;
+    openSheet(`<h3>Нагадати пізніше: ${U.esc(r.name)}</h3>
+      <p class="muted small">Вузол перейде в «Відкладено» і не рахуватиметься простроченим до цієї дати. Запис у журналі він не замінює.</p>
+      ${opt(14, 'Через 2 тижні')}${opt(30, 'Через місяць')}${opt(91, 'Через 3 місяці')}
+      ${r.snooze && r.snooze > U.today() ? `<button class="item" data-act="snooze-set" data-id="${U.esc(id)}" data-days="0"><b>Скасувати відкладення</b><div class="sub">зараз відкладено до ${U.date(r.snooze)}</div></button>` : ''}
+      <button class="btn ghost wide" data-act="sheet-close">Закрити</button>`);
+  }
+  async function snoozeSet(id, days) {
+    const r = DB.get(id);
+    if (!r) return;
+    await DB.save(Object.assign({}, r, { snooze: days > 0 ? U.addDays(U.today(), days) : null }));
+    closeSheet();
+    U.toast(days > 0 ? 'Відкладено до ' + U.date(U.addDays(U.today(), days)) : 'Відкладення скасовано');
+    route();
+  }
+
   async function copyText(text) {
     try { await navigator.clipboard.writeText(text); U.toast('Скопійовано'); }
     catch (x) { U.toast('Не вдалося скопіювати — виділіть текст вручну'); }
@@ -184,6 +222,10 @@ const App = (() => {
       case 'folder-forget': Obmin.forgetFolder(); break;
       case 'folder-show': Obmin.fillFolder(true); break;
       case 'folder-import': Obmin.importFromFolder(+el.dataset.i); break;
+      case 'quick-check': quickCheck(el.dataset.id); break;
+      case 'quick-check-save': quickCheckSave(el.dataset.id); break;
+      case 'snooze': snooze(el.dataset.id); break;
+      case 'snooze-set': snoozeSet(el.dataset.id, +el.dataset.days); break;
       case 'photo-open': openPhoto(el.dataset.id); break;
       case 'photo-del': {
         if (!confirm('Видалити це фото?')) return;
@@ -285,6 +327,13 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.7.0': [
+      'Новий головний екран: угорі одне речення — що зараз головне; вузли згруповано: «Прострочено», «Незабаром», «Гаразд» (згорнуто).',
+      'На кожній картці — смужка ресурсу: скільки вже «з’їдено» від заміни до заміни.',
+      'Швидкі дії на картці: «Зроблено», «Перевірено» (для оглядів — одним записом) і «Пізніше» (відкласти на 2 тижні, місяць чи 3 місяці).',
+      'Якщо пробіг не записували понад місяць — програма нагадає. У полі пробігу одразу видно оцінку на сьогодні.',
+      'Сезонні строки: у пункті регламенту можна вказати «щороку до 01.11, 01.04» (шини).',
+    ],
     '0.6.0': [
       'Програма оновлюється сама — кнопку «Оновити» натискати не треба.',
       'Витрати: пробіг за рік рахується на 31 грудня (між показами — оцінка). Виправлено 2019 і 2020 роки; роки без документів теж видно.',
