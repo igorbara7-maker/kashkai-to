@@ -200,6 +200,29 @@ const M = (() => {
     return [...years.values()].sort((a, b) => b.year - a.year);
   }
 
+  // Останні 12 місяців: скільки коштує машина на місяць і на 1 км, частки за видами витрат.
+  function cost12() {
+    const today = U.today();
+    const from = (+today.slice(0, 4) - 1) + today.slice(4);
+    const parts = { to: 0, fuel: 0, other: 0 };
+    let n = 0;
+    for (const f of fuels()) if (f.date && f.date > from && f.date <= today) { parts.fuel += f.sum || 0; n++; }
+    for (const x of DB.list('expense')) if (x.date && x.date > from && x.date <= today && x.sum) { parts.other += x.sum; n++; }
+    for (const d of docs()) if (d.count && d.date && d.date > from && d.date <= today) { parts.to += docTotal(d).total; n++; }
+    const total = parts.to + parts.fuel + parts.other;
+    if (!n || !total) return null;
+    const pts = points();
+    let km = null, kmEst = false, start = from;
+    if (pts.length) {
+      if (pts[0].date > start) start = pts[0].date;
+      const a = kmAt(start, pts), b = kmAt(today, pts);
+      if (a && b && b.km > a.km) { km = b.km - a.km; kmEst = !!(a.est || b.est); }
+    }
+    // Якщо облік почався менше року тому — ділимо на справжню кількість місяців.
+    const months = Math.max(1, Math.min(12, (new Date(today) - new Date(start)) / 2629800000));
+    return { total, parts, from: start, months, perMonth: total / months, km, kmEst, perKm: km ? total / km : null };
+  }
+
   // Пробіг за рік: пробіг на 31 грудня мінус пробіг на 31 грудня попереднього року
   // (між показами — оцінка). Перший рік рахуємо від першого показу, поточний — по сьогодні.
   function yearKm(y, pts = points(), today = U.today()) {
@@ -386,7 +409,7 @@ const M = (() => {
 
   return {
     ST, CATS, DOC_KINDS, vehicle, rules, works, odos, docs, fuels, notes, points, current, rate, kmAt,
-    context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, yearKm, totalKm, docRules, ruleCost, used, usedCats,
+    context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, cost12, yearKm, totalKm, docRules, ruleCost, used, usedCats,
     issues, checkList,
   };
 })();

@@ -57,16 +57,26 @@ const Parts = (() => {
     ['Exist', n => 'https://exist.ua/search/?q=' + encodeURIComponent(n)],
   ];
 
+  // Номери, що стоять «зараз», але не збігаються ні з оригіналом, ні з аналогами — показуємо попередження.
+  function mismatch(p) {
+    if (!p.oem || !p.now) return [];
+    const known = key([p.oem, p.alts || ''].join(' '));
+    const nums = (p.now.match(/\d{2,6}[\- ]?[0-9A-Za-z]{3,6}/g) || []).filter(t => /\d{4}/.test(t) && /[A-Za-z]|-/.test(t) || /^\d{9,}$/.test(t));
+    return nums.filter(t => key(t).length >= 8 && !known.includes(key(t)));
+  }
+
   function item(p) {
     const n = (p.oem || '').trim();
+    const mm = mismatch(p);
     const shops = n ? `<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${SHOPS.map(([nm, f]) =>
       `<a class="btn small ghost" href="${e(f(n))}" target="_blank" rel="noopener">${nm}</a>`).join('')}
       <button class="btn small ghost" type="button" data-act="copy" data-src="#pn_${e(p.id)}">Скопіювати номер</button></div>` : '';
-    return `<div class="item${p.dont ? ' muted' : ''}">
+    return `<div class="item${p.dont ? ' muted' : ''}" data-q="${e([p.name, p.oem, p.alts, p.now, p.note].join(' ').toLowerCase())}">
       <div class="row"><b class="grow">${e(nameOf(p))}</b><a class="btn small ghost" href="#/edit/part/${e(p.id)}">Змінити</a></div>
       ${n ? `<div>Оригінал: <b id="pn_${e(p.id)}">${e(n)}</b></div>` : '<div class="muted small">Номера ще немає — знайдіть за VIN і впишіть</div>'}
       ${p.alts ? `<div class="small">Аналоги: ${e(p.alts).replace(/\n/g, '; ')}</div>` : ''}
       ${p.now ? `<div class="small">Зараз стоїть: ${e(p.now)}</div>` : ''}
+      ${mm.length ? `<div class="small err">⚠ Номер ${e(mm.join(', '))} стояв, але його немає серед оригіналу й аналогів — звірте за VIN і впишіть в аналоги, якщо підходить.</div>` : ''}
       ${p.dont ? '<div class="small err">Не брати</div>' : ''}
       ${p.note ? `<div class="small muted">${e(p.note)}</div>` : ''}
       ${p.src ? `<div class="small muted">Звідки: ${e(p.src)}</div>` : ''}
@@ -95,7 +105,17 @@ const Parts = (() => {
       <section class="panel"><div class="row"><div class="grow"><b>${ps.length}</b> <span class="muted small">пунктів${empty ? ' · без номера: ' + empty : ''}</span></div>${add}</div>
         <p class="muted small">Номери — з ваших актів СТО. Перш ніж купувати, звіряйте за VIN у каталозі: в актах бувають помилки розпізнавання.</p>
         <p><button class="btn small ghost" data-act="parts-seed">Дозаповнити з актів</button></p></section>
-      ${body}`,
+      <input id="pq" type="search" placeholder="Пошук: назва чи номер" autocomplete="off" style="width:100%;margin:8px 0">
+      <div id="pbody">${body}</div>`,
+      after: () => {
+        const q = document.getElementById('pq');
+        if (!q) return;
+        q.addEventListener('input', () => {
+          const t = q.value.trim().toLowerCase();
+          document.querySelectorAll('#pbody .item').forEach(it => { it.hidden = !!t && !it.dataset.q.includes(t); });
+          document.querySelectorAll('#pbody .sec').forEach(h => { const l = h.nextElementSibling; h.hidden = !!t && ![...l.children].some(c => !c.hidden); });
+        });
+      },
     };
   }
 

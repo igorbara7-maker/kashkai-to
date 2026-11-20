@@ -458,16 +458,30 @@ const V = (() => {
         <div class="row"><b class="grow">${y.year}</b><span class="muted">0 грн</span></div>
         <div class="sub muted">Документів за цей рік немає — якщо витрати були, додайте документи.</div>${kmLine(y)}${fuelLine(y)}
       </section>`).join('');
+    const c12 = M.cost12();
+    const share = c12 ? [['ТО і ремонт', c12.parts.to, 'to'], ['Пальне', c12.parts.fuel, 'fuel'], ['Дрібні', c12.parts.other, 'other']].filter(x => x[1] > 0) : [];
+    const head12 = c12 ? `<section class="panel">
+        <div class="muted">Машина коштує за останні ${c12.months >= 11.5 ? '12 місяців' : Math.round(c12.months) + ' міс.'}</div>
+        <div class="big">≈ ${U.money0(c12.perMonth)} <span class="muted small">на місяць</span></div>
+        ${c12.perKm ? `<div class="sub"><b class="strong">${c12.perKm.toFixed(2).replace('.', ',')} грн на 1 км</b> · ${U.km(c12.km, c12.kmEst)} за цей час</div>` : '<div class="sub muted">Пробігу за цей час немає — додайте покази, щоб побачити ціну кілометра.</div>'}
+        <div class="share">${share.map(x => `<i class="sh-${x[2]}" style="flex:${x[1].toFixed(0)}"></i>`).join('')}</div>
+        <div class="legend">${share.map(x => `<span><i class="sh-${x[2]}"></i>${e(x[0])} ${U.money0(x[1])} (${Math.round(x[1] / c12.total * 100)}%)</span>`).join('')}</div>
+      </section>` : '';
+    const yy = +U.today().slice(0, 4), yTot = y => y ? y.total + y.fuel + y.other : 0;
+    const yNow = ys.find(y => y.year === yy), yPrev = ys.find(y => y.year === yy - 1);
+    const cmp = yPrev && yTot(yPrev) > 0 ? `<div class="sub">Усього утримання: ${yy} — <b class="strong">${U.money0(yTot(yNow))}</b> (рік ще триває), ${yy - 1} — <b class="strong">${U.money0(yTot(yPrev))}</b></div>` : '';
     const tk = M.totalKm();
     const fuelAll = ys.reduce((a, y) => a + y.fuel, 0), fuelN = ys.reduce((a, y) => a + y.fuelN, 0);
     const otherAll = ys.reduce((a, y) => a + y.other, 0), otherN = ys.reduce((a, y) => a + y.otherN, 0);
     return {
       title: 'Витрати', html: `
+      ${head12}
       <section class="panel">
         <div class="big">${U.money0(all)}</div>
-        <div class="muted">ТО і ремонт — за документами, позначеними «у витратах»</div>
-        ${tk && all ? `<div class="sub">За весь час обліку (з ${U.date(tk.from)}, ${U.km(tk.km, true)}): ${U.money0(all / tk.km * 1000)} на 1000 км</div>` : ''}
+        <div class="muted">ТО і ремонт за весь час — за документами, позначеними «у витратах»</div>
+        ${tk && all ? `<div class="sub">З ${U.date(tk.from)} (${U.km(tk.km, true)}): ${U.money0(all / tk.km * 1000)} на 1000 км</div>` : ''}
         ${extra(fuelAll, null, fuelN, otherAll, otherN, all)}
+        ${cmp}
         <p class="actions"><a class="btn small ghost" href="#/palne">Пальне</a> <a class="btn small ghost" href="#/dribni">Дрібні витрати</a> <a class="btn small ghost" href="#/poizdky">Поїздки</a></p>
       </section>
       ${years || '<p class="muted">Витрат ще немає.</p>'}
@@ -493,7 +507,6 @@ const V = (() => {
   function avto() {
     const v = M.context().v || {};
     const link = (h, t, s) => `<a class="item" href="${h}"><b>${t}</b>${s ? `<div class="sub">${s}</div>` : ''}</a>`;
-    const n = M.notes().filter(x => !x.done).length;
     return {
       title: 'Авто', html: `
       <section class="panel"><b>${e(v.name || 'Автомобіль')}</b>
@@ -504,8 +517,6 @@ const V = (() => {
         ${link('#/zapchasty', 'Мої запчастини', 'Номери оригіналу й аналогів, що стоїть зараз, пошук у магазинах')}
         ${link('#/shyny', 'Шини', 'Комплекти, що стоїть зараз, сезонні заміни, вік і протектор')}
         ${link('#/reglament', 'Регламент', 'Пункти обслуговування та інтервали — можна правити')}
-        ${link('#/probih', 'Пробіг', 'Усі покази одометра')}
-        ${link('#/notes', 'Нотатки' + (n ? ` (${n})` : ''), 'Відкриті питання, поради механіків')}
       </div>`,
     };
   }

@@ -334,3 +334,9 @@ button.item { width: 100%; text-align: left; font: inherit; cursor: pointer; }
 .visit summary::-webkit-details-marker { display: none; }
 .visit-b { padding: 0 8px 8px; }
 .h-mon .sec.row { display: flex; align-items: baseline; }
+
+.share { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 10px 0 6px; gap: 2px; }
+.share i { display: block; height: 100%; }
+.sh-to { background: var(--accent); } .sh-fuel { background: #e0a030; } .sh-other { background: #8a94a6; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .85rem; }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; }
