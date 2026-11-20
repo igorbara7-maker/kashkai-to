@@ -199,7 +199,97 @@ const V = (() => {
     };
   }
 
-  // ---------- Журнал ----------
+  // ---------- Історія: одна стрічка за місяцями ----------
+  const MONTHS = ['Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень', 'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'];
+  const HFILT = [['', 'Усе'], ['sto', 'СТО'], ['fuel', 'Пальне'], ['tire', 'Шини'], ['exp', 'Витрати'], ['km', 'Пробіг']];
+  const KM_GUESS = /^\s*пробіг.*(оцінк|уточн)/i;
+
+  function hist(q) {
+    const sel = q.get('rule') || '';
+    const f = HFILT.some(x => x[0] === q.get('f')) ? q.get('f') : '';
+    const evs = [];
+    // візити на СТО: роботи за документом (або за датою, якщо документа немає) + документи без робіт
+    const groups = new Map();
+    for (const w of M.works()) {
+      const k = w.doc || ('d' + (w.date || ''));
+      if (!groups.has(k)) groups.set(k, { doc: w.doc ? DB.get(w.doc) : null, ws: [] });
+      groups.get(k).ws.push(w);
+    }
+    for (const d of M.docs()) if (!groups.has(d.id)) groups.set(d.id, { doc: d, ws: [] });
+    for (const g of groups.values()) {
+      if (sel && !g.ws.some(w => w.rule === sel)) continue;
+      const d = g.doc, date = (d && d.date) || (g.ws[0] && g.ws[0].date) || '';
+      const t = d ? M.docTotal(d) : { total: 0 };
+      const kmW = g.ws.find(w => w.km != null);
+      let guess = false;
+      const rows = g.ws.map(w => {
+        const r = DB.get(w.rule);
+        const notes = [w.parts, w.note].filter(Boolean).filter(n => { if (KM_GUESS.test(n)) { guess = true; return false; } return true; });
+        return { w, name: r ? r.name : 'Вузол видалено', notes };
+      });
+      const title = d ? [d.code, d.seller].filter(Boolean).join(' · ') : 'Роботи без документа';
+      const nph = d ? DB.filesOf(d.id).length : 0;
+      const text = [title, d && d.kind, d && d.number, d && d.about, U.date(date),
+        ...((d && d.items) || []).map(i => i.name + ' ' + (i.art || '')),
+        ...rows.map(r => r.name + ' ' + (r.w.what || '') + ' ' + r.notes.join(' '))].join(' ');
+      const km = kmW ? kmW.km : d && d.km != null ? d.km : null;
+      const kmEst = kmW ? kmW.kmEst : d && d.kmEst;
+      evs.push({
+        type: 'sto', date, sum: t.total || 0, text,
+        html: `<details class="visit"><summary><div class="row"><b>🔧 ${e(title)}</b><span class="grow"></span><b>${t.total ? U.money(t.total) : ''}</b></div>
+          <div class="sub">${U.date(date)}${rows.length ? ' · робіт: ' + rows.length : ''}${km != null ? ' · ' + U.km(km, kmEst) : ''}</div></summary>
+          <div class="visit-b">${rows.map(r => `<a class="item" href="#/edit/work/${e(r.w.id)}"><div><b>${e(r.name)}</b>${r.w.what ? ' — ' + e(r.w.what) : ''}</div>
+            ${r.notes.length ? `<div class="sub">${e(r.notes.join(' · '))}</div>` : ''}</a>`).join('')}
+            ${guess ? '<p class="muted small">Пробіг у цьому візиті — оцінка, варто уточнити.</p>' : ''}
+            ${d ? `<p class="actions"><a class="btn small ghost" href="#/doc/${e(d.id)}">Відкрити документ${nph ? ' (фото: ' + nph + ')' : ''}</a></p>` : ''}</div></details>`,
+      });
+    }
+    if (!sel) {
+      for (const x of DB.list('fuel')) evs.push({ type: 'fuel', date: x.date || '', sum: x.sum || 0, text: ['заправка пальне', x.station, x.fuel, x.note].join(' '),
+        html: `<a class="item" href="#/edit/fuel/${e(x.id)}"><div class="row"><b>⛽ Заправка</b><span class="grow"></span><b>${U.money(x.sum)}</b></div>
+          <div class="sub">${U.date(x.date)} · ${P.lit(P.litres(x))}${x.station ? ' · ' + e(x.station) : ''}${x.km != null ? ' · ' + U.km(x.km) : ''}</div></a>` });
+      for (const x of DB.list('tireevent')) evs.push({ type: 'tire', date: x.date || '', sum: 0, text: ['шини', T.KINDS[x.kind], x.where, x.note].join(' '),
+        html: `<a class="item" href="#/edit/tireevent/${e(x.id)}"><div class="row"><b>🛞 ${e(T.KINDS[x.kind] || 'Шини')}</b></div>
+          <div class="sub">${U.date(x.date)}${x.where ? ' · ' + e(x.where) : ''}${x.km != null ? ' · ' + U.km(x.km) : ''}</div></a>` });
+      for (const x of DB.list('expense')) evs.push({ type: 'exp', date: x.date || '', sum: x.sum || 0, text: ['витрата', x.cat, x.note].join(' '),
+        html: `<a class="item" href="#/edit/expense/${e(x.id)}"><div class="row"><b>💳 ${e(x.cat || 'Витрата')}</b><span class="grow"></span><b>${U.money(x.sum)}</b></div>
+          <div class="sub">${U.date(x.date)}${x.note ? ' · ' + e(x.note) : ''}</div></a>` });
+      for (const x of DB.list('trip')) evs.push({ type: 'exp', date: x.from || '', sum: 0, text: ['поїздка', x.name].join(' '),
+        html: `<a class="item" href="#/poizdka/${e(x.id)}"><div class="row"><b>🚗 ${e(x.name || 'Поїздка')}</b></div>
+          <div class="sub">${U.date(x.from)}${x.to && x.to !== x.from ? ' — ' + U.date(x.to) : x.to ? '' : ' · триває'}</div></a>` });
+      for (const x of M.odos()) evs.push({ type: 'km', date: x.date || '', sum: 0, text: ['пробіг одометр', x.src].join(' '),
+        html: `<a class="item" href="#/edit/odo/${e(x.id)}"><div class="row"><b>🔢 Пробіг</b><span class="grow"></span><b>${U.km(x.km, x.kmEst)}</b></div>
+          <div class="sub">${U.date(x.date)}${x.src ? ' · ' + e(x.src) : ''}</div></a>` });
+      for (const x of M.notes().filter(n => !n.done)) evs.push({ type: 'note', date: x.date || '', sum: 0, text: ['нотатка', x.text].join(' '),
+        html: `<a class="item" href="#/edit/note/${e(x.id)}"><div><b>📝 Нотатка</b></div><div class="sub">${U.date(x.date)} · ${e(x.text)}</div></a>` });
+    }
+    const shown = evs.filter(x => f ? x.type === f : x.type !== 'km');
+    shown.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const months = new Map();
+    for (const x of shown) {
+      const k = (x.date || '').slice(0, 7) || '—';
+      if (!months.has(k)) months.set(k, []);
+      months.get(k).push(x);
+    }
+    const body = [...months].map(([k, arr]) => {
+      const sum = arr.reduce((s, x) => s + x.sum, 0);
+      const name = k === '—' ? 'Без дати' : MONTHS[+k.slice(5, 7) - 1] + ' ' + k.slice(0, 4);
+      return `<section class="h-mon"><h3 class="sec row"><span class="grow">${name}</span>${sum ? `<b>${U.money(sum)}</b>` : ''}</h3>
+        <div class="list">${arr.map(x => `<div class="h-ev" data-text="${e(x.text.toLowerCase())}">${x.html}</div>`).join('')}</div></section>`;
+    }).join('');
+    const nOpen = M.notes().filter(n => !n.done).length;
+    const rule = sel && DB.get(sel);
+    return {
+      title: 'Історія', html: `
+      <div class="toolbar"><input type="search" placeholder="Пошук: СТО, номер, деталь, рік" data-filter=".h-ev"></div>
+      <div class="seg six">${HFILT.map(([k, t]) => `<a href="#/zhurnal${k || sel ? '?' : ''}${[k ? 'f=' + k : '', sel ? 'rule=' + encodeURIComponent(sel) : ''].filter(Boolean).join('&')}"${k === f ? ' class="on"' : ''}>${t}</a>`).join('')}</div>
+      ${rule ? `<p class="small">Вузол: <b>${e(rule.name)}</b> · <a href="#/zhurnal${f ? '?f=' + f : ''}">показати всі</a></p>` : ''}
+      <p class="actions"><a class="btn small ghost" href="#/notes">Нотатки${nOpen ? ' (' + nOpen + ')' : ''}</a> <a class="btn small ghost" href="#/probih">Усі покази пробігу</a></p>
+      ${body || '<p class="muted">Записів ще немає.</p>'}`,
+    };
+  }
+
+  // ---------- Журнал (старий вигляд, не використовується) ----------
   function zhurnal(q) {
     const sel = q.get('rule') || '';
     const rules = M.rules();
@@ -571,5 +661,5 @@ const V = (() => {
       <label class="btn small ghost">З галереї<input type="file" accept="image/*" multiple data-ocr hidden></label>`;
   }
 
-  return { stan, rule, zhurnal, docs, doc, vytraty, sche, avto, maistru, perevirka, reglament, notes, probih, obmin, nalashtuvannia, notFound, remText, intervalText, mainText, ocrButtons };
+  return { stan, rule, hist, zhurnal, docs, doc, vytraty, sche, avto, maistru, perevirka, reglament, notes, probih, obmin, nalashtuvannia, notFound, remText, intervalText, mainText, ocrButtons };
 })();

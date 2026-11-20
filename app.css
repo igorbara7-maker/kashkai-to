@@ -327,3 +327,10 @@ button.item { width: 100%; text-align: left; font: inherit; cursor: pointer; }
 .plain { color: inherit; text-decoration: none; }
 .wide-btns .btn { flex: 1 1 0; }
 .bars-h { margin: 14px 0 6px; font-size: .95rem; color: var(--muted); }
+
+.seg.six a { font-size: .8rem; padding: 8px 1px; }
+.visit { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); margin: 0 0 8px; }
+.visit summary { padding: 10px 12px; cursor: pointer; list-style: none; }
+.visit summary::-webkit-details-marker { display: none; }
+.visit-b { padding: 0 8px 8px; }
+.h-mon .sec.row { display: flex; align-items: baseline; }

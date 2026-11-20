@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.17.0';
+  const VERSION = '0.18.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -29,8 +29,8 @@ const App = (() => {
       switch (a) {
         case '': case 'stan': r = V.stan(); break;
         case 'rule': r = V.rule(b); break;
-        case 'zhurnal': r = V.zhurnal(q); break;
-        case 'docs': r = V.docs(); break;
+        case 'zhurnal': r = V.hist(q); break;
+        case 'docs': r = V.hist(new URLSearchParams('f=sto')); break;
         case 'doc': r = V.doc(b); break;
         case 'vytraty': r = V.vytraty(); break;
         case 'sche': r = V.sche(); break;
@@ -386,6 +386,7 @@ const App = (() => {
         const s = x.dataset.text || '';
         x.hidden = !words.every(w => s.includes(w));
       });
+      document.querySelectorAll('.h-mon').forEach(m => { m.hidden = !m.querySelector('.h-ev:not([hidden])'); });
       return;
     }
     F.onInput(ev);
@@ -448,6 +449,11 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.18.0': [
+      'Історія — одна стрічка за місяцями (у заголовку місяця — сума). Візит на СТО — одна картка: торкніться, щоб побачити роботи й документ.',
+      'Угорі пошук (СТО, номер, деталь, рік) і фільтри: Усе · СТО · Пальне · Шини · Витрати · Пробіг. Документи шукайте тут же.',
+      'Нотатки й усі покази пробігу — кнопками під фільтрами.',
+    ],
     '0.17.0': [
       'Головна стала простішою: одна картка «Наступний візит на СТО» — що прострочено чи скоро, орієнтовна ціна за минулими чеками і кнопка «Показати майстру».',
       'Огляди («перевірити при нагоді») окремо від замін; «Усі вузли» — одним рядком із кольоровими лічильниками.',
