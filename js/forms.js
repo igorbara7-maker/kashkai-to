@@ -211,6 +211,7 @@ const F = (() => {
       <form class="panel form" data-form="${type}" data-id="${isNew ? '' : e(id)}">
         ${def.fields().map(f => field(f, rec[f.k])).join('')}
         ${fuel ? '<p class="small err" id="fuelMsg" hidden></p>' : ''}
+        ${fuel && isNew ? '<p class="small" id="chekState" hidden></p>' : ''}
         ${withPhoto && isNew ? `<div class="fld"><span>Фото чека <small>за бажанням — збережеться разом із записом</small></span>
           <div class="row"><label class="btn small">Камера<input type="file" accept="image/*" capture="environment" data-pick hidden></label>
           <label class="btn small ghost">З галереї<input type="file" accept="image/*" multiple data-pick hidden></label>
@@ -232,9 +233,43 @@ const F = (() => {
   // Позначка «не до поїздки» — лише коли поїздки взагалі є.
   function noTrip() { return Trip.has() ? [{ k: 'noTrip', label: 'Не зараховувати до поїздки', type: 'check' }] : []; }
   function pick(files) {
-    picked = picked.concat([...files]);
+    const fresh = [...files];
+    picked = picked.concat(fresh);
     const el = document.getElementById('pickCount');
     if (el) el.textContent = picked.length ? 'вибрано фото: ' + picked.length : '';
+    const form = document.querySelector('form[data-form="fuel"]');
+    if (form && fresh.length) readChek(form, fresh);
+  }
+
+  // Чек АЗС: розпізнаємо фото і заповнюємо порожні поля заправки (жовте тло — звірте з чеком).
+  let chekSeq = 0;
+  async function readChek(form, files) {
+    const st = document.getElementById('chekState'), my = ++chekSeq;
+    const say = t => { if (st && my === chekSeq && st.isConnected) { st.hidden = false; st.className = 'small'; st.innerHTML = t; } };
+    say('Читаю чек… перший раз довше — завантажується модуль розпізнавання.');
+    try {
+      const r = await OCR.recognize(files, t => say('Читаю чек: ' + U.esc(t)));
+      if (my !== chekSeq || !form.isConnected) return;
+      const c = Chek.parse(r.rows, U.today());
+      if (!c.ok) { say('Чек не вдалося прочитати — внесіть дані вручну. Сфотографуйте ближче, рівно, при доброму світлі.'); return; }
+      let n = 0;
+      const set = (k, v, force) => {
+        const el = form.elements[k];
+        if (v == null || v === '' || !el || (el.value.trim() && !force)) return;
+        el.value = typeof v === 'number' ? numIn(v) : v;
+        el.closest('.fld').classList.add('auto');
+        n++;
+      };
+      set('date', c.date, form.elements.date.value === U.today());
+      set('litres', c.litres); set('price', c.price); set('sum', c.sum);
+      set('fuel', c.fuel, true); set('station', c.station);
+      P.hint(form);
+      say('<span class="ok">Чек прочитано.</span> Заповнено полів: ' + n + '. Поля з жовтим тлом звірте з чеком.'
+        + (c.discount ? ' Ціна — з урахуванням знижки ' + U.money(c.discount) + '.' : '') + (c.notes.length ? ' ' + U.esc(c.notes.join('; ')) + '.' : ''));
+    } catch (err) {
+      console.error(err);
+      say('Не вдалося прочитати чек: ' + U.esc(err.message) + '. Внесіть дані вручну.');
+    }
   }
 
   // ---------- кілька робіт за один візит ----------
@@ -437,7 +472,10 @@ const F = (() => {
   // Автосума позиції: к-сть × ціна, доки суму не введено вручну.
   function onInput(ev) {
     const t = ev.target, form = t.form;
-    if (form && form.dataset.form === 'fuel') { P.hint(form); return; }
+    if (form && form.dataset.form === 'fuel') {
+      const a = t.closest && t.closest('.auto'); if (a) a.classList.remove('auto');
+      P.hint(form); return;
+    }
     if (form && /^tire/.test(form.dataset.form)) { T.onInput(ev, form); return; }
     if (form && form.dataset.form === 'trip') { Trip.onInput(ev, form); return; }
     if (!form || form.dataset.form !== 'doc') return;

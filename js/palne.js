@@ -6,7 +6,7 @@
 const P = (() => {
   const e = U.esc;
   const FUELS = ['А-95', 'А-95+', 'А-98', 'А-92'];
-  const STATIONS = ['WOG', 'ОККО', 'UPG', 'SOCAR', 'Shell', 'БРСМ-Нафта', 'Укрнафта', 'Укравтогаз', 'Amic'];
+  const STATIONS = ['WOG', 'ОККО', 'UPG', 'SOCAR', 'Shell', 'БРСМ-Нафта', 'Укрнафта', 'Укравтогаз', 'Amic', 'Євро Смарт Пауер'];
   const r2 = n => Math.round(n * 100) / 100;
   const dec = (n, d = 2) => n == null ? '—' : n.toLocaleString('uk-UA', { minimumFractionDigits: d, maximumFractionDigits: d });
   const lit = n => dec(n, n != null && Math.abs(n - Math.round(n)) < 0.005 ? 0 : 2) + ' л';
