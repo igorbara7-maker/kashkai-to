@@ -205,12 +205,15 @@ const M = (() => {
     const today = U.today();
     const from = (+today.slice(0, 4) - 1) + today.slice(4);
     const parts = { to: 0, fuel: 0, other: 0 };
-    let n = 0;
-    for (const f of fuels()) if (f.date && f.date > from && f.date <= today) { parts.fuel += f.sum || 0; n++; }
-    for (const x of DB.list('expense')) if (x.date && x.date > from && x.date <= today && x.sum) { parts.other += x.sum; n++; }
-    for (const d of docs()) if (d.count && d.date && d.date > from && d.date <= today) { parts.to += docTotal(d).total; n++; }
+    let n = 0, nFuel = 0, first = null;
+    const seen = dt => { if (dt && (!first || dt < first)) first = dt; };
+    for (const f of fuels()) if (f.date && f.date > from && f.date <= today) { parts.fuel += f.sum || 0; n++; nFuel++; seen(f.date); }
+    for (const x of DB.list('expense')) if (x.date && x.date > from && x.date <= today && x.sum) { parts.other += x.sum; n++; seen(x.date); }
+    for (const d of docs()) if (d.count && d.date && d.date > from && d.date <= today) { parts.to += docTotal(d).total; n++; seen(d.date); }
     const total = parts.to + parts.fuel + parts.other;
     if (!n || !total) return null;
+    // Мало даних — не вигадуємо: потрібні хоч 3 місяці записів і 3 заправки.
+    if (!first || (new Date(today) - new Date(first)) / 86400000 < 90 || nFuel < 3) return { few: true, nFuel, first };
     const pts = points();
     let km = null, kmEst = false, start = from;
     if (pts.length) {

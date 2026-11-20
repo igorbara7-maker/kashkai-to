@@ -459,8 +459,8 @@ const V = (() => {
         <div class="sub muted">Документів за цей рік немає — якщо витрати були, додайте документи.</div>${kmLine(y)}${fuelLine(y)}
       </section>`).join('');
     const c12 = M.cost12();
-    const share = c12 ? [['ТО і ремонт', c12.parts.to, 'to'], ['Пальне', c12.parts.fuel, 'fuel'], ['Дрібні', c12.parts.other, 'other']].filter(x => x[1] > 0) : [];
-    const head12 = c12 ? `<section class="panel">
+    const share = c12 && !c12.few ? [['ТО і ремонт', c12.parts.to, 'to'], ['Пальне', c12.parts.fuel, 'fuel'], ['Дрібні', c12.parts.other, 'other']].filter(x => x[1] > 0) : [];
+    const head12 = c12 && c12.few ? `<section class="panel"><div class="muted">Скільки машина коштує на місяць і на 1 км — покажу, коли накопичиться даних: хоча б 3 місяці записів і 3 заправки (зараз заправок: ${c12.nFuel}).</div></section>` : c12 ? `<section class="panel">
         <div class="muted">Машина коштує за останні ${c12.months >= 11.5 ? '12 місяців' : Math.round(c12.months) + ' міс.'}</div>
         <div class="big">≈ ${U.money0(c12.perMonth)} <span class="muted small">на місяць</span></div>
         ${c12.perKm ? `<div class="sub"><b class="strong">${c12.perKm.toFixed(2).replace('.', ',')} грн на 1 км</b> · ${U.km(c12.km, c12.kmEst)} за цей час</div>` : '<div class="sub muted">Пробігу за цей час немає — додайте покази, щоб побачити ціну кілометра.</div>'}
