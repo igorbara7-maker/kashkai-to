@@ -245,18 +245,18 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
       [{ v: 'Витрати на обслуговування', s: S.title }],
       [{ v: 'Лише документи з позначкою «у витратах». Позиції перераховано з поправкою на знижку чи ПДВ, щоб разом вийшла сума документа.', s: S.note }],
       [],
-      head(['Рік', 'ТО і ремонт, грн', 'Документів', 'Пробіг за рік, км', 'ТО і ремонт: грн на 1000 км', 'Пальне, грн', 'Пальне, л', 'Разом утримання, грн', 'Примітка']),
+      head(['Рік', 'ТО і ремонт, грн', 'Документів', 'Пробіг за рік, км', 'ТО і ремонт: грн на 1000 км', 'Пальне, грн', 'Пальне, л', 'Дрібні витрати, грн', 'Разом утримання, грн', 'Примітка']),
     ];
     for (const y of ys) {
       const note = [y.kmEst ? 'пробіг — оцінка між показами' : '', y.kmFirst ? 'неповний рік: облік з ' + U.date(y.kmFrom) : y.kmNow ? 'рік ще триває' : '',
         y.count ? '' : 'документів немає'].filter(Boolean).join('; ');
       rows.push([y.year, Mo(y.total), y.count, K(y.km), Mo(y.km && y.total ? y.total / y.km * 1000 : null),
-        Mo(y.fuelN ? y.fuel : null), { v: y.fuelN ? Math.round(y.fuelL * 100) / 100 : null, s: S.lit }, Mo(y.total + y.fuel), note || null]);
+        Mo(y.fuelN ? y.fuel : null), { v: y.fuelN ? Math.round(y.fuelL * 100) / 100 : null, s: S.lit }, Mo(y.otherN ? y.other : null), Mo(y.total + y.fuel + y.other), note || null]);
     }
     const all = ys.reduce((a, y) => a + y.total, 0), cnt = ys.reduce((a, y) => a + y.count, 0);
-    const fuel = ys.reduce((a, y) => a + y.fuel, 0), fuelL = ys.reduce((a, y) => a + y.fuelL, 0);
+    const fuel = ys.reduce((a, y) => a + y.fuel, 0), fuelL = ys.reduce((a, y) => a + y.fuelL, 0), other = ys.reduce((a, y) => a + y.other, 0);
     const mb = n => ({ v: Math.round(n * 100) / 100, s: S.moneyBold });
-    rows.push([{ v: 'Разом', s: S.bold }, mb(all), { v: cnt, s: S.bold }, null, null, mb(fuel), { v: Math.round(fuelL * 100) / 100, s: S.lit }, mb(all + fuel)]);
+    rows.push([{ v: 'Разом', s: S.bold }, mb(all), { v: cnt, s: S.bold }, null, null, mb(fuel), { v: Math.round(fuelL * 100) / 100, s: S.lit }, mb(other), mb(all + fuel + other)]);
     rows.push([], [{ v: 'За категоріями', s: S.bold }]);
     const cats = {};
     ys.forEach(y => Object.entries(y.cats).forEach(([c, s]) => { cats[c] = (cats[c] || 0) + s; }));
@@ -266,7 +266,17 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
       rows.push([W(c), ...ys.map(y => Mo(y.cats[c] > 0.005 ? y.cats[c] : null)), { v: Math.round(cats[c] * 100) / 100, s: S.moneyBold }]);
     }
     rows.push([{ v: 'Разом', s: S.bold }, ...ys.map(y => ({ v: Math.round(y.total * 100) / 100, s: S.moneyBold })), { v: Math.round(all * 100) / 100, s: S.moneyBold }]);
-    return { name: 'Витрати', rows, freeze: [1, 0], cols: [34, ...Array(Math.max(8, ys.length + 1)).fill(13)] };
+    // Дрібні витрати на авто — своя таблиця за категоріями.
+    if (other > 0.005) {
+      const oc = {};
+      ys.forEach(y => Object.entries(y.otherCats).forEach(([c, v]) => { oc[c] = (oc[c] || 0) + v; }));
+      rows.push([], head(['Дрібні витрати на авто', ...ys.map(y => String(y.year)), 'Разом']));
+      for (const c of Object.keys(oc).filter(c => oc[c] > 0.005).sort((a, b) => oc[b] - oc[a])) {
+        rows.push([W(c), ...ys.map(y => Mo(y.otherCats[c] > 0.005 ? y.otherCats[c] : null)), mb(oc[c])]);
+      }
+      rows.push([{ v: 'Разом', s: S.bold }, ...ys.map(y => mb(y.other)), mb(other)]);
+    }
+    return { name: 'Витрати', rows, freeze: [1, 0], cols: [34, ...Array(Math.max(9, ys.length + 1)).fill(13)] };
   }
 
   function fuelSheet() {
@@ -334,6 +344,49 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
     return table({ name: 'Шини', rows, freeze: [0, 0], cols: [16, 11, 14, 14, 18, 13, 7, 9, 6, 13, 12, 11, 12, 11, 12, 11, 20, 36] }, hr, n, 18);
   }
 
+  function tripsSheet() {
+    const ts = Trip.trips().slice().reverse();   // старші вгорі
+    const rows = [
+      [{ v: 'Поїздки', s: S.title }],
+      [{ v: 'Лише витрати на машину. Витрата пального точна, якщо вказано рівень у баку на старті й фініші (бак ' + Trip.tank() + ' л); інакше — приблизна, за заправками в дорозі; з рівнями пальне в «Усього» — за використаним. ≈ — пробіг лише оцінка.', s: S.note }],
+      [],
+      head(['Поїздка', 'З', 'По', 'Днів', 'Пробіг, км', 'У баку на старті', 'У баку на фініші', 'Заправлено, л', 'Заплачено за пальне в дорозі, грн', 'Пальне за використаним, грн', 'Л на 100 км', 'Пальне: грн на 1 км',
+        'Дрібні витрати, грн', 'СТО, шиномонтаж (документи), грн', 'Усього на машину, грн', 'На день, грн', 'На 1 км, грн', 'Примітка']),
+    ];
+    const hr = rows.length;
+    const sums = [];
+    for (const t of ts) {
+      const x = Trip.summary(t);
+      sums.push(x);
+      const note = [x.live ? 'ще триває' : '', x.use && !x.use.exact ? 'витрата приблизна' : '', t.note].filter(Boolean).join('; ');
+      rows.push([W(t.name), Dt(t.from), Dt(t.to), x.days || null, K(x.km, x.est), t.levelStart != null ? Trip.levelText(t.levelStart) : null,
+        t.levelEnd != null ? Trip.levelText(t.levelEnd) : null, { v: x.litres ? Math.round(x.litres * 100) / 100 : null, s: S.lit }, Mo(x.fuelSum || null), Mo(x.byUse ? x.fuelCost : null),
+        { v: x.use ? Math.round(x.use.per100 * 10) / 10 : null, s: S.dec1 }, Mo(x.use ? x.use.perKm : null), Mo(x.other || null), Mo(x.docSum || null),
+        Mo(x.total), Mo(x.perDay), Mo(x.perKm), W(note || null)]);
+    }
+    rows.push([], [{ v: 'Записи поїздок', s: S.bold }]);
+    rows.push(head(['Поїздка', 'Дата', 'Що', 'На що / АЗС / СТО', 'Сума, грн', 'Літрів', 'Пробіг, км', 'Примітка']));
+    for (const x of sums) {
+      const recs = [...x.fuels, ...x.exps, ...x.docs].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+      for (const r of recs) {
+        rows.push(r.t === 'fuel' ? [W(x.t.name), Dt(r.date), 'Заправка', W(r.station), Mo(r.sum), { v: Math.round(P.litres(r) * 100) / 100, s: S.lit }, K(r.km), W(r.note)]
+          : r.t === 'expense' ? [W(x.t.name), Dt(r.date), 'Витрата на авто', W(r.cat), Mo(r.sum), null, null, W(r.note)]
+            : [W(x.t.name), Dt(r.date), 'Документ ' + (r.code || ''), W([r.seller, r.kind].filter(Boolean).join(', ')), Mo(M.docTotal(r).total), null, K(r.km, r.kmEst), W(r.about)]);
+      }
+    }
+    return table({ name: 'Поїздки', rows, freeze: [1, hr], cols: [24, 12, 12, 7, 11, 11, 11, 11, 13, 13, 10, 11, 12, 14, 13, 11, 10, 36] }, hr, ts.length, 18);
+  }
+
+  function smallSheet() {
+    const xs = Trip.expenses();
+    const rows = [head(['Дата', 'Сума, грн', 'На що', 'Примітка', 'Поїздка', 'Фото чека, шт.'])];
+    for (const x of xs) {
+      const t = Trip.tripOf(x);
+      rows.push([Dt(x.date), Mo(x.sum), W(x.cat), W(x.note), W(t ? t.name : null), DB.filesOf(x.id).length || null]);
+    }
+    return table({ name: 'Дрібні витрати', rows, freeze: [0, 1], cols: [12, 12, 26, 44, 24, 9] }, 1, xs.length, 6);
+  }
+
   function probihSheet() {
     const os = M.odos();
     const rows = [head(['Дата', 'Пробіг, км', 'Звідки'])];
@@ -359,7 +412,8 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
   async function build() {
     const now = new Date();
     const v = M.vehicle();
-    const sheets = [stanSheet(now), zhurnalSheet(), docsSheet(), itemsSheet(), costsSheet(), fuelSheet(), ...(T.has() ? [tiresSheet()] : []), probihSheet(), reglamentSheet(), notesSheet()];
+    const sheets = [stanSheet(now), zhurnalSheet(), docsSheet(), itemsSheet(), costsSheet(), fuelSheet(), ...(T.has() ? [tiresSheet()] : []),
+      ...(Trip.has() ? [tripsSheet()] : []), ...(Trip.expenses().length ? [smallSheet()] : []), probihSheet(), reglamentSheet(), notesSheet()];
     const blob = await write(sheets, v.name + ' — облік ТО');
     const name = `кашкай_таблиця_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.xlsx`;
     return new File([blob], name, { type: MIME });
@@ -396,7 +450,7 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
     return {
       title: 'Таблиця Excel', back: true, html: `
       <section class="panel">
-        <p>Усі дані одним файлом Excel: стан вузлів, журнал робіт, документи і їхні позиції, витрати за роками й категоріями, пальне, шини, пробіг, регламент, нотатки.</p>
+        <p>Усі дані одним файлом Excel: стан вузлів, журнал робіт, документи і їхні позиції, витрати за роками й категоріями, пальне, шини, поїздки, дрібні витрати, пробіг, регламент, нотатки.</p>
         <p class="muted small">Записів у журналі: ${M.works().length}, документів: ${M.docs().length}, позицій: ${items}, заправок: ${M.fuels().length}. Фото у таблицю не входять — вони є в копії «Обмін даними».</p>
         <p class="actions"><button class="btn" data-act="excel-save">Зберегти таблицю</button></p>
         <div id="excelOut"></div>

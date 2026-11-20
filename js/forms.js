@@ -129,9 +129,26 @@ const F = (() => {
         { k: 'station', label: 'АЗС', type: 'text', list: M.used('fuel', 'station', P.STATIONS) },
         { k: 'missed', label: 'Попередню заправку не записано (чек загубився)', type: 'check' },
         { k: 'note', label: 'Примітка', type: 'textarea', rows: 2 },
+        ...noTrip(),
       ],
       defaults: () => { const l = M.fuels().pop(); return { date: U.today(), fuel: l && l.fuel ? l.fuel : 'А-95' }; },
       check: r => P.complete(r) && kmOk(r.date, r.km),
+    },
+    expense: {
+      title: 'Витрата на авто', t: 'expense',
+      fields: () => [
+        { k: 'sum', label: 'Сума, грн', type: 'number', req: true },
+        { k: 'cat', label: 'На що', type: 'select', opts: Trip.catOpts(curCat) },
+        { k: 'date', label: 'Дата', type: 'date', req: true },
+        { k: 'note', label: 'Примітка', type: 'text', hint: 'що саме, де — за бажанням' },
+        ...noTrip(),
+      ],
+      defaults: q => { const l = Trip.expenses().pop(); return { date: U.today(), cat: (q && q.get('cat')) || (l && l.cat) || Trip.CATS[0] }; },
+      check: r => {
+        if (r.sum == null || r.sum <= 0) { U.toast('Вкажіть суму більшу за нуль'); return false; }
+        if (r.sum > 20000 && !confirm('Сума ' + U.money(r.sum) + ' — чимала для дрібної витрати. Можливо, помилка в цифрах. Зберегти все одно?')) return false;
+        return true;
+      },
     },
     note: {
       title: 'Нотатка', t: 'note',
@@ -152,8 +169,10 @@ const F = (() => {
         { k: 'warnDays', label: 'Попереджати за, днів', type: 'number', mode: 'numeric' },
         { k: 'tireSummer', label: 'Літні шини ставити', type: 'text', hint: 'з–по, ДД.ММ–ДД.ММ (стоять зимові — нагадає)' },
         { k: 'tireWinter', label: 'Зимові шини ставити', type: 'text', hint: 'з–по, ДД.ММ–ДД.ММ (стоять літні — нагадає)' },
+        { k: 'tank', label: "Об'єм паливного бака, л", type: 'number', mode: 'numeric', hint: 'для точної витрати в поїздках; Qashqai J11 з переднім приводом — 55 л, перевірте в інструкції' },
       ],
       check: r => {
+        if (r.tank != null && (r.tank < 20 || r.tank > 150)) { U.toast("Об'єм бака — у літрах, від 20 до 150", 4000); return false; }
         for (const k of ['tireSummer', 'tireWinter']) {
           if (r[k] && M.seasonDates(r[k]).length !== 2) { U.toast('Дати заміни шин — дві дати ДД.ММ, напр. 01.04–30.04', 4000); return false; }
         }
@@ -171,6 +190,7 @@ const F = (() => {
     if (type === 'doc') return docForm(id, q);
     if (type === 'tireset') return T.setForm(id);
     if (type === 'tireevent') return T.eventForm(id, q);
+    if (type === 'trip') return Trip.form(id, q);
     const def = DEFS[type];
     if (!def) return V.notFound();
     const isNew = id === 'new';
@@ -178,23 +198,26 @@ const F = (() => {
     if (isNew) rec = Object.assign({}, def.defaults ? def.defaults(q) : {});
     else rec = type === 'vehicle' ? M.vehicle() : DB.get(id);
     if (!rec) return V.notFound();
-    const fuel = type === 'fuel';
-    if (fuel) picked = [];
+    const fuel = type === 'fuel', withPhoto = fuel || type === 'expense';   // фото чека
+    if (withPhoto) picked = [];
+    curCat = rec.cat;
+    const focus = k => () => { const el = document.getElementById('f_' + k); if (el) el.focus(); };
     return {
-      // Новий показ пробігу — одразу курсор у полі (на телефоні відкриється цифрова клавіатура).
-      after: isNew && type === 'odo' ? () => { const el = document.getElementById('f_km'); if (el) el.focus(); }
-        : fuel ? () => { P.hint(document.querySelector('form[data-form="fuel"]')); if (!isNew) App.showPhotos(id); } : null,
+      // Новий показ пробігу, нова витрата — одразу курсор у полі (на телефоні відкриється цифрова клавіатура).
+      after: isNew && type === 'odo' ? focus('km') : isNew && type === 'expense' ? focus('sum')
+        : fuel ? () => { P.hint(document.querySelector('form[data-form="fuel"]')); if (!isNew) App.showPhotos(id); }
+          : withPhoto ? () => App.showPhotos(id) : null,
       title: def.title, back: true, form: true, html: `
       <form class="panel form" data-form="${type}" data-id="${isNew ? '' : e(id)}">
         ${def.fields().map(f => field(f, rec[f.k])).join('')}
         ${fuel ? '<p class="small err" id="fuelMsg" hidden></p>' : ''}
-        ${fuel && isNew ? `<div class="fld"><span>Фото чека <small>за бажанням — збережеться із заправкою</small></span>
+        ${withPhoto && isNew ? `<div class="fld"><span>Фото чека <small>за бажанням — збережеться разом із записом</small></span>
           <div class="row"><label class="btn small">Камера<input type="file" accept="image/*" capture="environment" data-pick hidden></label>
           <label class="btn small ghost">З галереї<input type="file" accept="image/*" multiple data-pick hidden></label>
           <span class="muted small" id="pickCount"></span></div></div>` : ''}
         ${actions(isNew, type !== 'vehicle')}
       </form>
-      ${fuel && !isNew ? `<section class="panel">
+      ${withPhoto && !isNew ? `<section class="panel">
         <div class="row"><h3 class="grow">Фото чека</h3>
           <label class="btn small">Камера<input type="file" accept="image/*" capture="environment" data-photo="${e(id)}" hidden></label>
           <label class="btn small ghost">З галереї<input type="file" accept="image/*" multiple data-photo="${e(id)}" hidden></label>
@@ -204,8 +227,10 @@ const F = (() => {
     };
   }
 
-  // Фото чека для нової заправки: збираємо, доки форму не збережено.
-  let picked = [];
+  // Фото чека для нової заправки чи витрати: збираємо, доки форму не збережено.
+  let picked = [], curCat = null;
+  // Позначка «не до поїздки» — лише коли поїздки взагалі є.
+  function noTrip() { return Trip.has() ? [{ k: 'noTrip', label: 'Не зараховувати до поїздки', type: 'check' }] : []; }
   function pick(files) {
     picked = picked.concat([...files]);
     const el = document.getElementById('pickCount');
@@ -282,6 +307,7 @@ const F = (() => {
     { k: 'count', label: 'Враховувати у витратах', type: 'check' },
     { k: 'about', label: 'Що це / рекомендації механіка', type: 'textarea', rows: 3 },
     { k: 'scan', label: 'Де паперовий оригінал чи скан', type: 'text', hint: 'файл, сторінка' },
+    ...noTrip(),
   ];
 
   function itemEd(i = {}) {
@@ -413,6 +439,7 @@ const F = (() => {
     const t = ev.target, form = t.form;
     if (form && form.dataset.form === 'fuel') { P.hint(form); return; }
     if (form && /^tire/.test(form.dataset.form)) { T.onInput(ev, form); return; }
+    if (form && form.dataset.form === 'trip') { Trip.onInput(ev, form); return; }
     if (!form || form.dataset.form !== 'doc') return;
     const auto = t.closest('.auto');
     if (auto) auto.classList.remove('auto'); // власник виправив — позначку знімаємо
@@ -462,6 +489,7 @@ const F = (() => {
     if (type === 'doc') return submitDoc(form);
     if (type === 'tireset') return T.submitSet(form);
     if (type === 'tireevent') return T.submitEvent(form);
+    if (type === 'trip') return Trip.submit(form);
     const def = DEFS[type];
     const vals = read(form, def.fields());
     let base;
@@ -470,13 +498,14 @@ const F = (() => {
     if (!base) { U.toast('Запис уже видалено'); return false; }
     const rec = Object.assign({}, base, vals);
     if (def.check && !def.check(rec)) return false;
-    await DB.save(rec);
-    if (type === 'fuel' && picked.length) {
+    const saved = await DB.save(rec);
+    if ((type === 'fuel' || type === 'expense') && picked.length) {
       U.toast('Зберігаю фото…', 10000);
-      for (const f of picked) await DB.addFile(rec.id, await U.compressImage(f));
+      for (const f of picked) await DB.addFile(saved.id, await U.compressImage(f));
       picked = [];
     }
-    U.toast('Збережено');
+    const tr = (type === 'fuel' || type === 'expense') && Trip.tripOf(saved);
+    U.toast(tr ? 'Збережено — у поїздці «' + tr.name + '»' : 'Збережено', tr ? 3500 : 2600);
     return true;
   }
 
@@ -492,20 +521,21 @@ const F = (() => {
       const n = DB.filesOf(id).length;
       msg = 'Видалити документ' + (n ? ' разом із фото (' + n + ')' : '') + '? Записи в журналі лишаться.';
     }
-    if (type === 'fuel') {
+    if (type === 'fuel' || type === 'expense') {
       const n = DB.filesOf(id).length;
-      msg = 'Видалити заправку' + (n ? ' разом із фото чека (' + n + ')' : '') + '?';
+      msg = 'Видалити ' + (type === 'fuel' ? 'заправку' : 'витрату') + (n ? ' разом із фото чека (' + n + ')' : '') + '?';
     }
+    if (type === 'trip') msg = 'Видалити поїздку? Заправки й витрати лишаться в загальному обліку.';
     if (type === 'tireset') {
       const n = DB.list('tireevent').filter(x => x.on === id || x.off === id).length, p = DB.filesOf(id).length;
       msg = (n ? 'Комплект згадується в історії замін (' + n + '). Якщо шини просто більше не використовуєте — краще позначте «Більше не використовується»: історія і пробіг лишаться. ' : '')
         + 'Видалити комплект' + (p ? ' разом із фото (' + p + ')' : '') + '?';
     }
     if (!confirm(msg)) return false;
-    if (type === 'doc' || type === 'fuel' || type === 'tireset') await DB.removeFiles(DB.filesOf(id).map(f => f.id));
+    if (type === 'doc' || type === 'fuel' || type === 'expense' || type === 'tireset') await DB.removeFiles(DB.filesOf(id).map(f => f.id));
     await DB.remove(id);
     U.toast('Видалено');
-    return { go: type === 'doc' ? '#/docs' : type === 'rule' ? '#/reglament' : null };
+    return { go: type === 'doc' ? '#/docs' : type === 'rule' ? '#/reglament' : type === 'trip' ? '#/poizdky' : null };
   }
 
   return { render, submit, del, onInput, itemEd, itemsTotal, setPending, pick, field, kmOk, docOpts, actions };

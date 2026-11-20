@@ -1,7 +1,7 @@
 'use strict';
 // Розрахунки: поточний пробіг, стан вузлів за регламентом, витрати.
 const M = (() => {
-  const DEF_VEHICLE = { id: 'vehicle', t: 'vehicle', name: 'Мій автомобіль', vin: '', warnKm: 1500, warnDays: 45, tireSummer: '01.04–30.04', tireWinter: '15.10–15.11' };
+  const DEF_VEHICLE = { id: 'vehicle', t: 'vehicle', name: 'Мій автомобіль', vin: '', warnKm: 1500, warnDays: 45, tireSummer: '01.04–30.04', tireWinter: '15.10–15.11', tank: 55 };
   const CATS = [
     'ТО: комплекс робіт', 'Олива двигуна і фільтр', 'Фільтри повітря і салону', 'Свічки запалювання',
     'Гальмівна система', 'Антифриз', 'Ремінь і ролики приводу', 'Олива МКПП', 'Ходова і рульове',
@@ -19,7 +19,7 @@ const M = (() => {
   const byDate = (a, b) => (a.date || '').localeCompare(b.date || '') || ((a.km || 0) - (b.km || 0));
   function vehicle() {
     const v = Object.assign({}, DEF_VEHICLE, DB.get('vehicle') || {});
-    for (const k of ['name', 'warnKm', 'warnDays', 'tireSummer', 'tireWinter']) if (v[k] == null || v[k] === '') v[k] = DEF_VEHICLE[k];
+    for (const k of ['name', 'warnKm', 'warnDays', 'tireSummer', 'tireWinter', 'tank']) if (v[k] == null || v[k] === '') v[k] = DEF_VEHICLE[k];
     return v;
   }
   const rules = () => DB.list('rule').sort((a, b) => (a.order ?? 999) - (b.order ?? 999) || a.name.localeCompare(b.name, 'uk'));
@@ -37,6 +37,10 @@ const M = (() => {
     for (const r of docs()) if (r.date && r.km != null && !r.kmEst) pts.push({ date: r.date, km: r.km });
     for (const r of DB.list('fuel')) if (r.date && r.km != null) pts.push({ date: r.date, km: r.km });
     for (const r of DB.list('tireevent')) if (r.date && r.km != null) pts.push({ date: r.date, km: r.km });
+    for (const r of DB.list('trip')) {
+      if (r.from && r.kmStart != null) pts.push({ date: r.from, km: r.kmStart });
+      if (r.to && r.kmEnd != null) pts.push({ date: r.to, km: r.kmEnd });
+    }
     return pts.sort(byDate);
   }
   const current = (pts = points()) => pts.length ? pts[pts.length - 1] : null;
@@ -159,13 +163,20 @@ const M = (() => {
   function expenses() {
     const years = new Map();
     const pts = points();
-    const yearOf = y => { let Y = years.get(y); if (!Y) years.set(y, Y = { year: y, total: 0, count: 0, cats: {}, fuel: 0, fuelL: 0, fuelN: 0 }); return Y; };
+    const yearOf = y => { let Y = years.get(y); if (!Y) years.set(y, Y = { year: y, total: 0, count: 0, cats: {}, fuel: 0, fuelL: 0, fuelN: 0, other: 0, otherN: 0, otherCats: {} }); return Y; };
     // Пальне — окремо від ТО і ремонту.
     for (const f of fuels()) {
       if (!f.date) continue;
       const Y = yearOf(+f.date.slice(0, 4));
       Y.fuel += f.sum || 0; Y.fuelN++;
       Y.fuelL += f.litres != null ? f.litres : f.sum && f.price ? f.sum / f.price : 0;
+    }
+    // Дрібні витрати на авто (мийка, стоянка, платна дорога…) — теж окремо, за своїми категоріями.
+    for (const x of DB.list('expense')) {
+      if (!x.date || !x.sum) continue;
+      const Y = yearOf(+x.date.slice(0, 4)), c = x.cat || 'Інше';
+      Y.other += x.sum; Y.otherN++;
+      Y.otherCats[c] = (Y.otherCats[c] || 0) + x.sum;
     }
     for (const d of docs()) {
       if (!d.count || !d.date) continue;

@@ -88,7 +88,7 @@ const V = (() => {
     const lc = Obmin.lastCopy(), copyAge = lc ? Math.floor((Date.now() - lc.at) / 864e5) : 0;
     const copyNote = copyAge >= 7 && Obmin.unsaved()
       ? `<div class="hint">Резервної копії не було ${U.daysText(copyAge)}, а зміни є. <button type="button" class="linkbtn" data-act="backup-now">Зробити копію</button></div>` : '';
-    const head = `
+    const head = Trip.bar() + `
       <section class="panel">
         ${verdict}
         <div class="row km-row"><div class="grow">
@@ -311,13 +311,23 @@ const V = (() => {
         : y.kmNow ? ' (рік ще триває)' : '';
       return '<div class="sub">Пробіг за рік ' + U.km(y.km, y.kmEst) + part + per + '</div>';
     };
-    // Пальне — окремим рядком, не змішуючи з ТО і ремонтом.
-    const fuelLine = y => y.fuelN ? `<div class="sub">Пальне: <b class="strong">${U.money0(y.fuel)}</b> (${P.lit(y.fuelL)}) · разом утримання: <b class="strong">${U.money0(y.total + y.fuel)}</b></div>` : '';
-    const years = ys.map(y => y.count ? `
+    // Пальне і дрібні витрати — окремими рядками, не змішуючи з ТО і ремонтом.
+    const extra = (fuel, fuelL, fuelN, other, otherN, total) => {
+      const bits = [];
+      if (fuelN) bits.push(`пальне: <b class="strong">${U.money0(fuel)}</b>${fuelL != null ? ` (${P.lit(fuelL)})` : ''}`);
+      if (otherN) bits.push(`дрібні витрати: <b class="strong">${U.money0(other)}</b>`);
+      if (!bits.length) return '';
+      bits.push(`разом утримання: <b class="strong">${U.money0(total + fuel + other)}</b>`);
+      const t = bits.join(' · ');
+      return `<div class="sub">${t[0].toUpperCase() + t.slice(1)}</div>`;
+    };
+    const fuelLine = y => extra(y.fuel, y.fuelL, y.fuelN, y.other, y.otherN, y.total);
+    const years = ys.map(y => y.count || y.otherN ? `
       <details class="panel">
         <summary><div class="row"><b class="grow">${y.year}</b><b>${U.money0(y.total)}</b></div>
-          <div class="sub">ТО і ремонт: ${y.count} ${U.plural(y.count, 'документ', 'документи', 'документів')}</div>${kmLine(y)}${fuelLine(y)}</summary>
+          <div class="sub">ТО і ремонт: ${y.count ? y.count + ' ' + U.plural(y.count, 'документ', 'документи', 'документів') : 'документів немає'}</div>${kmLine(y)}${fuelLine(y)}</summary>
         ${bars(y.cats)}
+        ${y.otherN ? `<h4 class="bars-h">Дрібні витрати на авто</h4>${bars(y.otherCats)}` : ''}
       </details>` : `
       <section class="panel">
         <div class="row"><b class="grow">${y.year}</b><span class="muted">0 грн</span></div>
@@ -325,14 +335,15 @@ const V = (() => {
       </section>`).join('');
     const tk = M.totalKm();
     const fuelAll = ys.reduce((a, y) => a + y.fuel, 0), fuelN = ys.reduce((a, y) => a + y.fuelN, 0);
+    const otherAll = ys.reduce((a, y) => a + y.other, 0), otherN = ys.reduce((a, y) => a + y.otherN, 0);
     return {
       title: 'Витрати', html: `
       <section class="panel">
         <div class="big">${U.money0(all)}</div>
         <div class="muted">ТО і ремонт — за документами, позначеними «у витратах»</div>
         ${tk && all ? `<div class="sub">За весь час обліку (з ${U.date(tk.from)}, ${U.km(tk.km, true)}): ${U.money0(all / tk.km * 1000)} на 1000 км</div>` : ''}
-        ${fuelN ? `<div class="sub">Пальне: <b class="strong">${U.money0(fuelAll)}</b> · разом утримання: <b class="strong">${U.money0(all + fuelAll)}</b></div>` : ''}
-        <p class="actions"><a class="btn small ghost" href="#/palne">Пальне</a></p>
+        ${extra(fuelAll, null, fuelN, otherAll, otherN, all)}
+        <p class="actions"><a class="btn small ghost" href="#/palne">Пальне</a> <a class="btn small ghost" href="#/dribni">Дрібні витрати</a> <a class="btn small ghost" href="#/poizdky">Поїздки</a></p>
       </section>
       ${years || '<p class="muted">Витрат ще немає.</p>'}
       ${ys.length ? `<details class="panel"><summary><b>За всі роки — за категоріями</b></summary>${bars(allCats)}</details>` : ''}`,
@@ -351,6 +362,8 @@ const V = (() => {
         ${link('#/perevirka', 'Перевірити дані' + (nc ? ` (${nc})` : ''), 'Оцінений пробіг, «уточніть», пробіг не по порядку, документи поза журналом')}
         ${link('#/palne', 'Пальне', 'Заправки, середня витрата, вартість кілометра')}
         ${link('#/shyny', 'Шини', 'Комплекти, що стоїть зараз, сезонні заміни, вік і протектор')}
+        ${link('#/poizdky', 'Поїздки' + (Trip.ongoing() ? ' (триває)' : ''), 'Пальне і витрати на машину в дорозі, підсумок поїздки')}
+        ${link('#/dribni', 'Дрібні витрати', 'Мийка, стоянка, платна дорога, доливання')}
         ${link('#/probih', 'Пробіг', 'Усі покази одометра')}
         ${link('#/reglament', 'Регламент', 'Пункти обслуговування та інтервали — можна правити')}
         ${link('#/obmin', 'Обмін даними', 'Копія для телефона чи компа, імпорт')}
@@ -473,7 +486,8 @@ const V = (() => {
         <h3>${e(v.name)}</h3>
         <dl class="kv">${v.vin ? `<dt>VIN</dt><dd>${e(v.vin)}</dd>` : ''}
           <dt>Попереджати за</dt><dd>${U.km(v.warnKm)} або ${U.daysText(v.warnDays)}</dd>
-          <dt>Заміна шин</dt><dd>літні — ${e(v.tireSummer)}, зимові — ${e(v.tireWinter)}</dd></dl>
+          <dt>Заміна шин</dt><dd>літні — ${e(v.tireSummer)}, зимові — ${e(v.tireWinter)}</dd>
+          <dt>Паливний бак</dt><dd>${U.int(v.tank)} л</dd></dl>
         <p class="actions"><a class="btn" href="#/edit/vehicle/vehicle">Змінити</a></p>
       </section>
       ${P.calendarPanel()}

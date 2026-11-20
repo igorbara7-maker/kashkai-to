@@ -133,7 +133,7 @@ const P = (() => {
     const withKm = fs.filter(f => f.km != null).length;
     const item = f => `<a class="item" href="#/edit/fuel/${e(f.id)}"><div class="row"><b>${U.date(f.date)}</b><span class="grow"></span><b>${U.money(f.sum)}</b></div>
       <div class="sub">${lit(litres(f))}${f.price != null ? ' × ' + dec(f.price) + ' грн' : ''}${f.fuel ? ' · ' + e(f.fuel) : ''}${f.station ? ' · ' + e(f.station) : ''}</div>
-      <div class="sub">${f.km != null ? U.km(f.km) : 'пробіг не вказано'}${f.missed ? ' · попередню не записано' : ''}${DB.filesOf(f.id).length ? ' · фото чека' : ''}${f.note ? ' · ' + e(f.note) : ''}</div></a>`;
+      <div class="sub">${f.km != null ? U.km(f.km) : 'пробіг не вказано'}${f.missed ? ' · попередню не записано' : ''}${DB.filesOf(f.id).length ? ' · фото чека' : ''}${(t => t ? ' · поїздка «' + e(t.name) + '»' : '')(Trip.tripOf(f))}${f.note ? ' · ' + e(f.note) : ''}</div></a>`;
     return {
       title: 'Пальне', back: true, html: `
       <section class="panel">
@@ -252,5 +252,5 @@ const P = (() => {
     </section>`;
   }
 
-  return { FUELS, STATIONS, complete, hint, usage, bySeason, totals, periods, litres, screen, calendarPanel, ics, icsText, gcal, events, dec, lit };
+  return { FUELS, STATIONS, complete, hint, usage, bySeason, totals, periods, litres, segments, sumUp, screen, calendarPanel, ics, icsText, gcal, events, dec, lit };
 })();

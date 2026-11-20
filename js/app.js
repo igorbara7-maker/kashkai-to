@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.11.0';
+  const VERSION = '0.12.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -14,8 +14,8 @@ const App = (() => {
     return { parts: path.split('/').map(decodeURIComponent), q: new URLSearchParams(i < 0 ? '' : h.slice(i + 1)) };
   }
 
-  const TAB_OF = { '': 'stan', stan: 'stan', rule: 'stan', zhurnal: 'zhurnal', docs: 'docs', doc: 'docs', vytraty: 'vytraty', palne: 'vytraty', foto: 'docs', share: 'docs' };
-  const TAB_OF_EDIT = { work: 'zhurnal', visit: 'zhurnal', doc: 'docs', odo: 'stan', fuel: 'vytraty' };
+  const TAB_OF = { '': 'stan', stan: 'stan', rule: 'stan', zhurnal: 'zhurnal', docs: 'docs', doc: 'docs', vytraty: 'vytraty', palne: 'vytraty', dribni: 'vytraty', foto: 'docs', share: 'docs' };
+  const TAB_OF_EDIT = { work: 'zhurnal', visit: 'zhurnal', doc: 'docs', odo: 'stan', fuel: 'vytraty', expense: 'vytraty' };
 
   function route() {
     const { parts, q } = parse();
@@ -37,6 +37,9 @@ const App = (() => {
         case 'probih': r = V.probih(); break;
         case 'palne': r = P.screen(); break;
         case 'shyny': r = T.screen(); break;
+        case 'poizdky': r = Trip.screen(); break;
+        case 'poizdka': r = Trip.tripScreen(b); break;
+        case 'dribni': r = Trip.expScreen(); break;
         case 'obmin': r = V.obmin(); break;
         case 'excel': r = Excel.screen(); break;
         case 'nalashtuvannia': r = V.nalashtuvannia(); break;
@@ -89,15 +92,19 @@ const App = (() => {
     s.innerHTML = '';
   }
   function openFab() {
+    const tr = Trip.ongoing();
     openSheet(`
+      ${tr ? `<a class="item" href="#/poizdka/${U.esc(tr.id)}"><b>Поїздка «${U.esc(tr.name)}»</b><div class="sub">Підсумок, завершити поїздку</div></a>` : ''}
       <a class="item" href="#/edit/visit/new"><b>Записати ТО / роботу</b><div class="sub">Що зроблено, по вузлах</div></a>
       <div class="item"><b>Документ з фото</b><div class="sub">Програма прочитає дату, суму, позиції — ви перевірите</div>
         <div class="actions">${V.ocrButtons()}</div></div>
       <a class="item" href="#/edit/doc/new"><b>Новий документ / чек вручну</b><div class="sub">Акт, накладна, чек — з позиціями і фото</div></a>
       <a class="item" href="#/edit/fuel/new"><b>Заправка</b><div class="sub">Літри, сума, пробіг — для витрати пального</div></a>
+      <a class="item" href="#/edit/expense/new"><b>Витрата на авто</b><div class="sub">Мийка, стоянка, платна дорога, доливання</div></a>
       <a class="item" href="#/edit/odo/new"><b>Записати пробіг</b><div class="sub">Показ одометра</div></a>
       <a class="item" href="#/edit/tireevent/new"><b>Шини</b><div class="sub">Сезонна заміна, огляд, ремонт</div></a>
       <a class="item" href="#/edit/note/new"><b>Нотатка</b><div class="sub">Порада механіка, нагадування</div></a>
+      ${tr ? '' : '<a class="item" href="#/edit/trip/new"><b>Почати поїздку</b><div class="sub">Пальне і витрати на машину в дорозі — з підсумком</div></a>'}
       <button class="btn ghost wide" data-act="sheet-close">Закрити</button>`);
   }
 
@@ -428,6 +435,12 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.12.0': [
+      'Поїздки: Ще → «Поїздки» → «Почати поїздку» (назва, дата, пробіг, за бажанням — рівень пального). Поки поїздка триває, на головному екрані — кнопки «Заправка» і «Витрата на авто», а заправки й витрати тих днів зараховуються до неї самі.',
+      'Підсумок поїздки: пробіг, витрата пального саме в цій поїздці (з рівнем у баку на старті й фініші — точна), скільки пішло на машину — усього, на день і на 1 км. Підсумок можна надіслати текстом.',
+      '«Витрата на авто» (+ → «Витрата на авто»): мийка, стоянка, платна дорога, доливання, дрібний ремонт — сума, на що, за бажанням фото чека. У «Витратах» — окремим рядком і в «разом утримання».',
+      'У таблиці Excel — аркуші «Поїздки» і «Дрібні витрати». Об’єм паливного бака — у Налаштуваннях → Автомобіль (55 л — перевірте).',
+    ],
     '0.11.0': [
       'Шини: Ще → «Шини». Додайте комплекти — зимові й літні: марка, модель, розмір, DOT (тиждень і рік виготовлення). Якщо на осях різні шини — дві групи по 2.',
       'Записуйте сезонні заміни (+ → «Шини»): програма покаже, що стоїть зараз, пробіг кожного комплекту за сезон і за весь час, вік шин.',
