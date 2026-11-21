@@ -531,11 +531,18 @@ const V = (() => {
     if (ctx.nowKm != null) L.push('Пробіг: ' + U.km(ctx.nowKm, ctx.nowEst) + ' (' + U.date(ctx.today) + ')');
     const sect = (title, arr, fn) => { if (arr.length) { L.push(''); L.push(title); arr.forEach(o => L.push('• ' + fn(o))); } };
     const last = o => o.lastDate ? 'востаннє ' + U.date(o.lastDate) + (o.lastKm != null ? ', ' + U.km(o.lastKm, o.lastKmEst) : '') : 'даних немає';
-    sect('ПОТРІБНО ЗРОБИТИ (строк минув):', list.filter(o => o.st === 'over'), o => o.rule.name + ' — ' + (o.rule.action || '').toLowerCase() + ' (' + last(o) + ')');
-    sect('НЕЗАБАРОМ:', list.filter(o => o.st === 'soon'), o => o.rule.name + ' — ' + (o.rule.action || '').toLowerCase() + ' (' + remText(o) + ')');
+    let unver = false;
+    const nums = o => {
+      const ns = M.ruleNums(o.rule);
+      if (ns.some(n => !n.ok)) unver = true;
+      return ns.map(n => '\n    ' + n.name + ': ' + n.num + (n.ok ? '' : ' *')).join('');
+    };
+    sect('ПОТРІБНО ЗРОБИТИ (строк минув):', list.filter(o => o.st === 'over'), o => o.rule.name + ' — ' + (o.rule.action || '').toLowerCase() + ' (' + last(o) + ')' + nums(o));
+    sect('НЕЗАБАРОМ:', list.filter(o => o.st === 'soon'), o => o.rule.name + ' — ' + (o.rule.action || '').toLowerCase() + ' (' + remText(o) + ')' + nums(o));
     sect('ПЕРЕВІРИТИ (немає записів про заміну):', list.filter(o => o.st === 'nodata'), o => o.rule.name + (o.rule.action ? ' — ' + o.rule.action.toLowerCase() : ''));
     sect('ПОДИВИТИСЬ СТАН:', list.filter(o => o.st === 'state'), o => o.rule.name + ' (' + last(o) + ')');
     sect('ШИНИ:', T.masterLines(tires), x => x);
+    if (unver) { L.push(''); L.push('* номер за каталогом, ще не звірений за VIN — уточніть на СТО'); }
     const ns = M.notes().filter(n => !n.done && n.master);
     if (ns.length) { L.push(''); L.push('ЩЕ:'); ns.forEach(n => L.push('• ' + n.text)); }
     const text = L.join('\n');

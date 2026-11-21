@@ -331,9 +331,22 @@ const M = (() => {
   // Орієнтовна ціна заміни вузла за останнім документом, де вона була (з урахуванням знижки документа).
   // Повертає {sum, src: 'part' | 'doc', year} або null.
   // Спершу — свіжі ціни з «Мої запчастини» (до 90 днів), якщо вони є на ВСІ деталі вузла; інакше — чек.
+  function ruleParts(rule) {
+    return DB.list('part').filter(p => !p.dont && [...itemKeys({ name: p.name, cat: '' })].some(k => NODE_RE[k] && NODE_RE[k].test(rule.name)));
+  }
+  // Номери деталей вузла для списку майстру: [{name, num, chk}] (оригінал, якщо не «не підходить», інакше перший аналог).
+  function ruleNums(rule) {
+    const out = [];
+    for (const p of ruleParts(rule)) {
+      const alts = Array.isArray(p.alts) ? p.alts : [];
+      const num = (p.oem && p.chk !== 'bad' ? p.oem : (alts.find(a => a.num && a.st !== 'dont') || {}).num || '').trim();
+      if (num) out.push({ name: p.name, num, ok: p.chk === 'ok' });
+    }
+    return out;
+  }
   function partsCost(rule) {
     const today = U.today(), fresh = d => d && U.days(d, today) <= 90;
-    const ps = DB.list('part').filter(p => !p.dont && [...itemKeys({ name: p.name, cat: '' })].some(k => NODE_RE[k] && NODE_RE[k].test(rule.name)));
+    const ps = ruleParts(rule);
     if (!ps.length) return null;
     let s = 0;
     for (const p of ps) {
@@ -432,7 +445,7 @@ const M = (() => {
 
   return {
     ST, CATS, DOC_KINDS, vehicle, rules, works, odos, docs, fuels, notes, points, current, rate, kmAt,
-    context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, cost12, yearKm, totalKm, docRules, ruleCost, used, usedCats,
+    context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, cost12, yearKm, totalKm, docRules, ruleCost, ruleNums, used, usedCats,
     issues, checkList,
   };
 })();
