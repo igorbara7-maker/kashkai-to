@@ -24,11 +24,12 @@ const Kamera = (() => {
   function odoGuess(rows, text) {
     if (rows.length > 14 || text.length > 160) return null;
     if (/(грн|сума|всього|сплати|акт|накладн|артикул|літр|дата|кількість)/i.test(text)) return null;
-    const now = M.context().nowKm;
+    // Нижня межа — останній ЗАПИСАНИЙ пробіг (не оцінка: вона буває завищена і відкинула б правильне число).
+    const c = M.context(), now = c.nowKm, low0 = c.cur ? c.cur.km : null;
     const nums = [...text.matchAll(/(?<![\d.,])(\d{2,3})\s?(\d{3})(?![\d])|(?<![\d.,])(\d{4,6})(?![\d])/g)]
       .map(m => +(m[3] || (m[1] + m[2]))).filter(n => n >= 1000 && n <= 999999);
-    const ok = nums.filter(n => now == null ? true : n >= now - 50 && n <= now + 30000);
-    return ok.length ? Math.max(...ok.filter(n => now == null || n <= now + 30000)) : null;
+    const ok = nums.filter(n => (low0 == null || n >= low0 - 50) && (now == null || n <= now + 30000));
+    return ok.length ? Math.max(...ok) : null;
   }
 
   async function attach(id) {

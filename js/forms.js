@@ -74,7 +74,6 @@ const F = (() => {
   }
 
   const DEFS = {
-    part: Parts.def,
     work: {
       title: 'Запис у журналі', t: 'work',
       fields: () => [
@@ -192,6 +191,7 @@ const F = (() => {
     if (type === 'tireset') return T.setForm(id);
     if (type === 'tireevent') return T.eventForm(id, q);
     if (type === 'trip') return Trip.form(id, q);
+    if (type === 'part') return Parts.form(id);
     const def = DEFS[type];
     if (!def) return V.notFound();
     const isNew = id === 'new';
@@ -479,6 +479,7 @@ const F = (() => {
     }
     if (form && /^tire/.test(form.dataset.form)) { T.onInput(ev, form); return; }
     if (form && form.dataset.form === 'trip') { Trip.onInput(ev, form); return; }
+    if (form && form.dataset.form === 'part') { Parts.onInput(ev); return; }
     if (!form || form.dataset.form !== 'doc') return;
     const auto = t.closest('.auto');
     if (auto) auto.classList.remove('auto'); // власник виправив — позначку знімаємо
@@ -529,6 +530,7 @@ const F = (() => {
     if (type === 'tireset') return T.submitSet(form);
     if (type === 'tireevent') return T.submitEvent(form);
     if (type === 'trip') return Trip.submit(form);
+    if (type === 'part') return Parts.submit(form);
     const def = DEFS[type];
     const vals = read(form, def.fields());
     let base;
