@@ -646,6 +646,7 @@ const V = (() => {
         <p class="actions"><a class="btn" href="#/edit/vehicle/vehicle">Змінити</a></p>
       </section>
       ${P.calendarPanel()}
+      ${Ceny.settingsPanel()}
       <section class="panel">
         <h3>Сховище на цьому пристрої</h3>
         <div id="storeInfo" class="muted">Перевіряю…</div>

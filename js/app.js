@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.23.1';
+  const VERSION = '0.24.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -298,6 +298,11 @@ const App = (() => {
         break;
       }
       case 'parts-seed': await Parts.seed(); route(); break;
+      case 'gem-run': Ceny.run(); break;
+      case 'gem-ok': await Ceny.accept(+el.dataset.i); break;
+      case 'gem-no': Ceny.reject(+el.dataset.i); break;
+      case 'gem-key-save': if (await Ceny.saveKey($('gemKey').value)) route(); break;
+      case 'gem-key-del': await Ceny.saveKey(''); route(); break;
       case 'pa-add': Parts.addAlt(); break;
       case 'pa-del': el.closest('.pa-ed').remove(); break;
       case 'tg-add': T.addGroup(); break;
@@ -459,6 +464,9 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.24.0': [
+      'Мої запчастини: кнопка «Оновити ціни (ШІ)» — Gemini шукає ціни в інтернеті за вашими номерами, а ви приймаєте їх по одній, звіряючи зі сторінкою. Ключ Gemini вставляється в Налаштуваннях.',
+    ],
     '0.23.1': [
       'Фото приладки: число можна виправити перед збереженням; з кількох чисел береться найближче до останнього пробігу, а не найбільше; інші числа з фото — кнопками.',
     ],
