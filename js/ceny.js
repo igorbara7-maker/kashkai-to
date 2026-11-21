@@ -13,8 +13,8 @@ const Ceny = (() => {
   const norm = s => (s || '').replace(/[\s.\-]/g, '').toUpperCase();
 
   async function saveKey(v) {
-    v = (v || '').trim();
-    if (v && !/^[A-Za-z0-9_\-]{20,80}$/.test(v)) { U.toast('Це не схоже на ключ Gemini'); return false; }
+    v = (v || '').replace(/[\s"']/g, '');
+    if (v && !/^[A-Za-z0-9_.\-]{20,200}$/.test(v)) { U.toast('Це не схоже на ключ Gemini'); return false; }
     await DB.setMeta(KEY, v || null);
     U.toast(v ? 'Ключ збережено на цьому пристрої' : 'Ключ прибрано');
     return true;
