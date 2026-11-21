@@ -329,7 +329,27 @@ const M = (() => {
   }
 
   // Орієнтовна ціна заміни вузла за останнім документом, де вона була (з урахуванням знижки документа).
+  // Повертає {sum, src: 'part' | 'doc', year} або null.
+  // Спершу — свіжі ціни з «Мої запчастини» (до 90 днів), якщо вони є на ВСІ деталі вузла; інакше — чек.
+  function partsCost(rule) {
+    const today = U.today(), fresh = d => d && U.days(d, today) <= 90;
+    const ps = DB.list('part').filter(p => !p.dont && [...itemKeys({ name: p.name, cat: '' })].some(k => NODE_RE[k] && NODE_RE[k].test(rule.name)));
+    if (!ps.length) return null;
+    let s = 0;
+    for (const p of ps) {
+      if (/л\b/i.test(p.qty || '')) return null;   // літрами: ціна за упаковку чи за літр — не вгадуємо
+      const alts = (Array.isArray(p.alts) ? p.alts : []).filter(a => a.st !== 'dont' && a.price != null && fresh(a.date))
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const price = p.oemPrice != null && fresh(p.oemDate) ? p.oemPrice : alts.length ? alts[0].price : null;
+      if (price == null) return null;
+      const m = /(\d+)\s*шт/.exec(p.qty || '');
+      s += price * (m ? +m[1] : 1);
+    }
+    return s > 0 ? { sum: Math.round(s / 10) * 10, src: 'part', year: +today.slice(0, 4) } : null;
+  }
   function ruleCost(rule) {
+    const pc = partsCost(rule);
+    if (pc) return pc;
     const ws = works().filter(w => w.rule === rule.id && w.doc);
     const d = ws.length ? DB.get(ws[ws.length - 1].doc) : null;
     if (!d || !d.items || !d.items.length) return null;
@@ -338,7 +358,7 @@ const M = (() => {
     for (const it of d.items) {
       if ([...itemKeys(it)].some(k => NODE_RE[k] && NODE_RE[k].test(rule.name))) s += (it.sum || 0) * coef;
     }
-    return s > 0 ? Math.round(s / 10) * 10 : null;
+    return s > 0 ? { sum: Math.round(s / 10) * 10, src: 'doc', year: +String(d.date || '').slice(0, 4) || null } : null;
   }
 
   // Значення, що вже траплялися — для підказок під час введення.

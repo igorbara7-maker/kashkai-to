@@ -75,12 +75,12 @@ const V = (() => {
     const nVisitOver = visit.filter(o => o.st === 'over').length;
     const plural = n => n === 1 ? 'робота' : n < 5 ? 'роботи' : 'робіт';
     const near = list.filter(o => o.st === 'ok' && o.remDays != null).sort((a, b) => a.remDays - b.remDays)[0];
-    let costSum = 0, costN = 0;
+    let costSum = 0, costN = 0, costDoc = false;
     const vrow = o => {
       const c = M.ruleCost(o.rule);
-      if (c) { costSum += c; costN++; }
+      if (c) { costSum += c.sum; costN++; if (c.src === 'doc') costDoc = true; }
       return `<a class="vrow st-${o.st}" href="#/rule/${e(o.rule.id)}"><span class="grow"><b>${e(o.rule.name.replace(/\s*\(.*\)$/, ''))}</b>
-        <span class="sub">${mainText(o)}</span></span>${c ? `<span class="muted small">≈ ${U.int(c)} грн</span>` : ''}</a>`;
+        <span class="sub">${mainText(o)}</span></span>${c ? `<span class="muted small">≈ ${U.int(c.sum)} грн${c.src === 'doc' && c.year ? ' (чек ' + c.year + ')' : ''}</span>` : ''}</a>`;
     };
     let visitCard;
     if (visit.length) {
@@ -90,7 +90,7 @@ const V = (() => {
         <div class="verdict st-${nVisitOver ? 'over' : 'soon'}">${title}</div>
         <div class="sub">Наступний візит на СТО</div>
         <div class="vlist">${rows}</div>
-        ${costN ? `<div class="sub">Орієнтовно ≈ ${U.int(costSum)} грн${costN < visit.length ? ' (оцінено ' + costN + ' з ' + visit.length + ')' : ''} — за минулими чеками</div>` : ''}
+        ${costN ? `<div class="sub">Орієнтовно ≈ ${U.int(costSum)} грн${costN < visit.length ? ' (оцінено ' + costN + ' з ' + visit.length + ')' : ''} — ${costDoc ? 'свіжі ціни запчастин або минулі чеки (могли змінитися)' : 'за свіжими цінами запчастин'}</div>` : ''}
         <p class="actions"><a class="btn" href="#/maistru">Показати майстру</a></p>
         <div class="small"><a href="#/edit/doc/new?ocr=1">Уже були на СТО? Сфотографуйте акт</a></div>
       </section>`;
