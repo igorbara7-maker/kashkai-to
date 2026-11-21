@@ -29,7 +29,10 @@ const Kamera = (() => {
     const nums = [...text.matchAll(/(?<![\d.,])(\d{2,3})\s?(\d{3})(?![\d])|(?<![\d.,])(\d{4,6})(?![\d])/g)]
       .map(m => +(m[3] || (m[1] + m[2]))).filter(n => n >= 1000 && n <= 999999);
     const ok = nums.filter(n => (low0 == null || n >= low0 - 50) && (now == null || n <= now + 30000));
-    return ok.length ? Math.max(...ok) : null;
+    // Найближче до останнього запису (а не найбільше): зайві числа на приладці (запас ходу, середнє тощо) не мають перетягувати.
+    const base = low0 != null ? low0 : now;
+    const u = [...new Set(ok)].sort((a, b) => base == null ? b - a : Math.abs(a - base) - Math.abs(b - base));
+    return u.length ? u : null;
   }
 
   async function attach(id) {
@@ -74,15 +77,19 @@ const Kamera = (() => {
       };
       return;
     }
-    const km = odoGuess(r.rows, r.text);
-    if (km != null) {
-      say('<span class="ok">Схоже на приладку.</span> Звірте число з фото:');
-      ask.innerHTML = `<section class="panel"><div class="big">${U.int(km)} км</div>
+    const cand = odoGuess(r.rows, r.text);
+    if (cand) {
+      say('<span class="ok">Схоже на приладку.</span> Звірте число з фото — за потреби виправте:');
+      ask.innerHTML = `<section class="panel"><input id="camKm" class="big" type="number" inputmode="numeric" value="${cand[0]}"> км
+        ${cand.length > 1 ? '<p class="small">Інші числа з фото: ' + cand.slice(1, 5).map(n => `<button type="button" class="btn small ghost" data-km="${n}">${U.int(n)}</button>`).join(' ') + '</p>' : ''}
         <p class="small muted">Дата — сьогодні (${e(U.date(today))}). Джерело — «Одометр».</p>
         <div class="actions"><button class="btn" id="camSaveOdo">Зберегти пробіг</button>
         <button class="btn ghost" id="camNotOdo">Ні, це документ СТО</button></div></section>`;
       document.getElementById('camNotOdo').onclick = toDoc;
+      ask.querySelectorAll('[data-km]').forEach(b => b.onclick = () => { document.getElementById('camKm').value = b.dataset.km; });
       document.getElementById('camSaveOdo').onclick = async () => {
+        const km = Math.round(+document.getElementById('camKm').value);
+        if (!(km > 0)) { U.toast('Вкажіть пробіг'); return; }
         const pts = M.points(), last = pts.length ? pts[pts.length - 1] : null;
         if (last && km < last.km && !confirm('Це менше за останній пробіг (' + U.km(last.km) + '). Зберегти все одно?')) return;
         const s = await DB.save({ t: 'odo', date: today, km, src: 'Одометр (фото)' });
