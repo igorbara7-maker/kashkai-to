@@ -349,3 +349,19 @@ button.item { width: 100%; text-align: left; font: inherit; cursor: pointer; }
 .sh-to { background: var(--accent); } .sh-fuel { background: #e0a030; } .sh-other { background: #8a94a6; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .85rem; }
 .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; }
+
+/* картки вузлів (вкладка «Авто») */
+.vcard > summary { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 12px 14px; cursor: pointer; list-style: none; }
+.vcard > summary::-webkit-details-marker { display: none; }
+.vcard > summary .sub { display: block; }
+.vcard[open] > summary { border-bottom: 1px solid var(--line); }
+.vsec { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.vsec:last-child { border-bottom: 0; }
+.vsec h4 { margin: 0 0 4px; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.vsec .actions { margin: 6px 0 0; }
+.vsec .part { padding: 8px 0; border-top: 1px dashed var(--line); }
+.vsec .part:first-of-type { border-top: 0; }
+.vsec .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; margin-top: 6px; }
+details.buy > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; }
+details.buy > summary::-webkit-details-marker { display: none; }
+.hrow { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; color: inherit; text-decoration: none; font-size: .92rem; }

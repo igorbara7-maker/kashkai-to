@@ -93,22 +93,30 @@ const Parts = (() => {
   }
   const ST = { ok: 'ставив — добре', dont: 'не брати' };
 
+  // Каталог оригіналу: Amayama — безкоштовні каталоги Nissan з пошуком за VIN. Сам VIN програма туди не передає:
+  // вона копіює його (з назвою деталі) у буфер обміну, а ви вставляєте у поле пошуку каталогу.
+  const CATALOG = 'https://www.amayama.com/en/genuine-catalogs/nissan';
+  const vinText = p => { const v = M.vehicle(); return [v.vin ? 'VIN ' + v.vin : '', 'Nissan Qashqai J11 1.2 DIG-T', 'Деталь: ' + nameOf(p)].filter(Boolean).join('\n'); };
+  const searchText = p => [p.name, p.oem, p.now, p.note, p.with, ...p.alts.flatMap(a => [a.brand, a.num, a.note])].filter(Boolean).join(' ').toLowerCase();
+
+  // Деталь у картці вузла: номер з позначкою перевірки, аналоги, ціни, «Знайти номер за VIN» і «Купити».
   function item(p) {
     const n = (p.oem || '').trim();
     const sn = n || ((p.alts.find(a => a.num) || {}).num || '');   // номер для пошуку в магазинах
     const mm = mismatch(p);
     const warn = p.chk !== 'ok' && J11.SUSPECT[pkOf(p)];
-    const shops = sn ? `<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${SHOPS.map(([nm, f]) =>
-      `<a class="btn small ghost" href="${e(f(sn))}" target="_blank" rel="noopener">${nm}</a>`).join('')}
-      <button class="btn small ghost" type="button" data-act="copy" data-src="#pn_${e(p.id)}">Скопіювати номер</button></div>` : '';
+    const find = p.chk === 'ok' ? '' : `<a class="btn small" href="${CATALOG}" target="_blank" rel="noopener" data-act="copy-text" data-text="${e(vinText(p))}">Знайти номер за VIN</a>`;
+    const buy = sn ? `<details class="buy"><summary class="btn small ghost">Купити</summary>
+      <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${SHOPS.map(([nm, f]) =>
+        `<a class="btn small ghost" href="${e(f(sn))}" target="_blank" rel="noopener">${nm}</a>`).join('')}
+        <button class="btn small ghost" type="button" data-act="copy" data-src="#pn_${e(p.id)}">Скопіювати номер</button></div></details>` : '';
     const alts = p.alts.filter(a => a.num || a.brand).map(a => `<li class="${a.st === 'dont' ? 'muted' : ''}">
       ${e([a.brand, a.num].filter(Boolean).join(' '))}${a.st ? ` <span class="small ${a.st === 'dont' ? 'err' : 'ok'}">${ST[a.st]}</span>` : ''}
       ${a.price != null ? '<br>' + priceText(a.price, a.date, a.shop) : ''}${a.note ? ` <span class="muted small">(${e(a.note)})</span>` : ''}</li>`).join('');
-    const q = [p.name, p.oem, p.now, p.note, p.with, ...p.alts.flatMap(a => [a.brand, a.num, a.note])].join(' ').toLowerCase();
-    return `<div class="item${p.dont ? ' muted' : ''}" data-q="${e(q)}">
+    return `<div class="part${p.dont ? ' muted' : ''}">
       <div class="row"><b class="grow">${e(nameOf(p))}${p.qty ? ` <span class="muted small">· ${e(p.qty)}</span>` : ''}</b><a class="btn small ghost" href="#/edit/part/${e(p.id)}">Змінити</a></div>
       ${n ? `<div>За каталогом: <b${p.chk === 'bad' ? ' class="err"' : ''}>${e(n)}</b> ${chkTag(p)}</div>`
-        : '<div class="muted small">Номера за каталогом ще немає — знайдіть за VIN і впишіть</div>'}
+        : '<div class="muted small">Номера за каталогом ще немає — знайдіть за VIN і впишіть («Змінити»)</div>'}
       ${n && p.oemPrice != null ? `<div class="small">Оригінал: ${priceText(p.oemPrice, p.oemDate, p.oemShop)}</div>` : ''}
       ${alts ? `<div class="small">Аналоги:</div><ul class="alts small">${alts}</ul>` : ''}
       ${p.with ? `<div class="small">Купити разом: ${e(p.with).replace(/\n/g, '; ')}</div>` : ''}
@@ -119,54 +127,27 @@ const Parts = (() => {
       ${p.note ? `<div class="small muted">${e(p.note)}</div>` : ''}
       ${p.src ? `<div class="small muted">Звідки: ${e(p.src)}</div>` : ''}
       <span hidden id="pn_${e(p.id)}">${e(sn)}</span>
-      ${shops}</div>`;
+      <div class="btns">${find}${buy}</div></div>`;
   }
 
-  function screen() {
-    const ps = parts();
-    const add = '<a class="btn" href="#/edit/part/new">Додати запчастину</a>';
-    if (!ps.length) {
-      return {
-        title: 'Мої запчастини', back: true, html: `<section class="panel"><h2>Свій список запчастин</h2>
-          <p>Короткий список під ваш автомобіль: номер за каталогом (з позначкою, чи звірено за VIN), аналоги з цінами на дату, що ставили на СТО. Кнопки відкривають пошук за номером на сайтах продавців.</p>
-          <p>Можна одразу заповнити номерами з ваших актів СТО. Це те, що ставили, — його ще треба звірити за VIN. Чого в актах не було — лишиться порожнім рядком «знайти за VIN».</p>
-          <p class="actions"><button class="btn" data-act="parts-seed">Заповнити з актів СТО</button> ${add}</p></section>`,
-      };
-    }
-    const cats = CATS.concat(ps.map(p => p.cat).filter(c => c && !CATS.includes(c)));
-    const body = cats.map(c => {
-      const xs = ps.filter(p => (p.cat || CATS[3]) === c).sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'uk'));
-      return xs.length ? `<h3 class="sec">${e(c)}</h3><div class="list">${xs.map(item).join('')}</div>` : '';
-    }).join('');
+  // Службові дії зі списком запчастин (під картками вузлів): заповнити, ціни через Gemini, додати свою.
+  function tools(ps) {
     const empty = ps.filter(p => !p.oem).length;
     const unchecked = ps.filter(p => p.oem && p.chk !== 'ok').length;
     const today = U.today();
     const stale = ps.filter(p => [[p.oemPrice, p.oemDate], ...p.alts.map(a => [a.price, a.date])]
       .some(([pr, d]) => pr != null && (!d || U.days(d, today) > FRESH))).length;
     const counts = [empty && 'без номера: ' + empty, unchecked && 'не перевірено за VIN: ' + unchecked, stale && 'зі старою ціною: ' + stale].filter(Boolean).join(' · ');
-    return {
-      title: 'Мої запчастини', back: true, html: `
-      <section class="panel"><div class="row"><div class="grow"><b>${ps.length}</b> <span class="muted small">пунктів${counts ? ' · ' + counts : ''}</span></div>${add}</div>
+    return `<details class="more"><summary>Запчастини: додати, ціни через Gemini</summary>
+      <section class="panel"><div class="row"><div class="grow"><b>${ps.length}</b> <span class="muted small">деталей${counts ? ' · ' + counts : ''}</span></div>
+        <a class="btn" href="#/edit/part/new">Додати запчастину</a></div>
         <p class="muted small">Номери з актів СТО — це те, що ставили, а не каталог: СТО могло поставити інше, а програма — помилитися, читаючи акт. Звірте номер за VIN і позначте «перевірено». Ціни — на дату; старші за 3 місяці показані сірим.</p>
-        <p><button class="btn small ghost" data-act="parts-seed">Дозаповнити з актів</button></p>
+        <p><button class="btn small ghost" data-act="parts-seed">${ps.length ? 'Дозаповнити з актів' : 'Заповнити з актів СТО'}</button></p>
         <p class="muted small"><b>Без ключа, безкоштовно:</b> 1) скопіюйте запит, 2) вставте його в додаток Gemini на телефоні, 3) скопіюйте відповідь і вставте нижче.</p>
         <p><button class="btn small" data-act="gem-copy">1. Скопіювати запит для Gemini</button></p>
         <textarea id="gemPaste" rows="3" placeholder="3. Сюди вставте відповідь Gemini" style="width:100%"></textarea>
         <p><button class="btn small" data-act="gem-paste">Розібрати відповідь</button></p></section>
-      <div id="gemBox"></div>
-      <input id="pq" type="search" placeholder="Пошук: назва, номер, виробник" autocomplete="off" style="width:100%;margin:8px 0">
-      <div id="pbody">${body}</div>`,
-      after: () => {
-        Ceny.draw();
-        const q = document.getElementById('pq');
-        if (!q) return;
-        q.addEventListener('input', () => {
-          const t = q.value.trim().toLowerCase();
-          document.querySelectorAll('#pbody .item').forEach(it => { it.hidden = !!t && !it.dataset.q.includes(t); });
-          document.querySelectorAll('#pbody .sec').forEach(h => { const l = h.nextElementSibling; h.hidden = !!t && ![...l.children].some(c => !c.hidden); });
-        });
-      },
-    };
+      <div id="gemBox"></div></details>`;
   }
 
   // ---------- форма ----------
@@ -193,8 +174,9 @@ const Parts = (() => {
     box.lastElementChild.querySelector('[name="a_brand"]').focus();
   }
 
-  function form(id) {
+  function form(id, q) {
     const isNew = id === 'new';
+    const node = isNew && q ? q.get('node') : '';
     const raw = isNew ? { t: 'part', cat: CATS[0], alts: [] } : DB.get(id);
     if (!raw) return V.notFound();
     const p = norm(raw);
@@ -206,7 +188,7 @@ const Parts = (() => {
     const fld = (f, v) => F.field(f, v);
     return {
       title: isNew ? 'Нова запчастина' : nameOf(p), back: true, form: true, html: `
-      <form class="panel form" data-form="part" data-id="${isNew ? '' : e(id)}">
+      <form class="panel form" data-form="part" data-id="${isNew ? '' : e(id)}"${node ? ` data-node="${e(node)}"` : ''}>
         <datalist id="paShops">${shops.map(x => `<option value="${e(x)}">`).join('')}</datalist>
         <datalist id="paBrands">${brands.map(x => `<option value="${e(x)}">`).join('')}</datalist>
         ${fld({ k: 'name', label: 'Назва', type: 'text', req: true }, p.name)}
@@ -235,6 +217,9 @@ const Parts = (() => {
         ${fld({ k: 'now', label: 'Що ставили (з актів СТО)', type: 'text' }, p.now)}
         ${fld({ k: 'note', label: 'Нотатка', type: 'textarea', rows: 2, hint: 'ставив, не підійшло, де брав' }, p.note)}
         ${fld({ k: 'dont', label: 'Не брати', type: 'check' }, p.dont)}
+        <h3>Вузол</h3>
+        <p class="muted small">Деталь показується в картці вузла. ${Array.isArray(p.nodes) && p.nodes.length ? 'Зараз вона в: ' + e(M.rules().filter(r => !r.group && Nodes.ofRule(r).some(k => p.nodes.includes(k))).map(r => r.name).join('; ') || 'вузол видалено') + '.' : 'Зараз вона ні до якого вузла не віднесена.'} Вибір нижче додає ще один вузол.</p>
+        ${fld({ k: 'addNode', label: 'Додати до вузла', type: 'select', opts: [{ v: '', l: '— не міняти —' }].concat(M.rules().filter(r => !r.group).map(r => ({ v: r.id, l: r.name }))) }, '')}
         ${F.actions(isNew)}
       </form>`,
     };
@@ -274,11 +259,14 @@ const Parts = (() => {
     const base = id ? DB.get(id) : { t: 'part' };
     if (!base) { U.toast('Запис уже видалено'); return false; }
     const saved = Object.assign({}, base, rec);
+    if (!id && form.dataset.node) saved.nodes = [form.dataset.node];   // нова деталь, додана з картки вузла
     if (!Array.isArray(saved.nodes)) saved.nodes = M.partNodes(saved);   // вузли зберігаються й надалі не залежать від назви
+    const add = DB.get(g('addNode'));
+    if (add) saved.nodes = [...new Set([...saved.nodes, ...Nodes.ofRule(add)])];
     await DB.save(saved);
     U.toast('Збережено');
     return true;
   }
 
-  return { screen, seed, form, submit, onInput, addAlt, CATS, parts, norm };
+  return { item, tools, searchText, seed, form, submit, onInput, addAlt, CATS, parts, norm };
 })();

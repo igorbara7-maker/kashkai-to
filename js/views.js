@@ -79,7 +79,7 @@ const V = (() => {
     const vrow = o => {
       const c = M.ruleCost(o.rule);
       if (c) { costSum += c.sum; costN++; if (c.src === 'doc') costDoc = true; }
-      return `<a class="vrow st-${o.st}" href="#/rule/${e(o.rule.id)}"><span class="grow"><b>${e(o.rule.name.replace(/\s*\(.*\)$/, ''))}</b>
+      return `<a class="vrow st-${o.st}" href="#/avto?open=${e(o.rule.id)}"><span class="grow"><b>${e(o.rule.name.replace(/\s*\(.*\)$/, ''))}</b>
         <span class="sub">${mainText(o)}</span></span>${c ? `<span class="muted small">≈ ${U.int(c.sum)} грн${c.src === 'doc' && c.year ? ' (чек ' + c.year + ')' : ''}</span>` : ''}</a>`;
     };
     let visitCard;
@@ -139,7 +139,7 @@ const V = (() => {
           <a class="btn small" href="#/edit/visit/new?rule=${id}">Зроблено</a>
           ${isCheckRule(o.rule) ? `<button type="button" class="btn small ghost" data-act="quick-check" data-id="${id}">Перевірено</button>` : ''}
           <button type="button" class="btn small ghost" data-act="snooze" data-id="${id}">${o.snoozed ? 'Відкладено' : 'Пізніше'}</button></div>` : '';
-      return `<div class="card st-${st}"><a class="card-main" href="#/rule/${id}"><b>${e(o.rule.name)}</b>
+      return `<div class="card st-${st}"><a class="card-main" href="#/avto?open=${id}"><b>${e(o.rule.name)}</b>
         <div class="main-line">${o.snoozed ? 'Відкладено до ' + U.date(o.snoozed) + ' · ' : ''}${mainText(o)}</div></a>${acts}</div>`;
     };
     const checksHtml = checks.length ? `<details class="more"><summary>Перевірити при нагоді (${checks.length})</summary><div class="cards">${checks.map(card).join('')}</div></details>` : '';
@@ -147,56 +147,10 @@ const V = (() => {
     const all = list.map(o => ({ o, st: o.snoozed && /over|soon|nodata/.test(o.st) ? 'later' : o.st }));
     const cnt = k => all.filter(x => k.includes(x.st)).length;
     const allHtml = `<details class="more"><summary>Усі вузли (${all.length}) <span class="cnt c-over">${cnt(['over'])}</span> <span class="cnt c-soon">${cnt(['soon', 'nodata'])}</span> <span class="cnt c-ok">${cnt(['ok', 'state', 'later'])}</span></summary>
-      <div class="list">${all.map(({ o, st }) => `<a class="item crow st-${st}" href="#/rule/${e(o.rule.id)}"><b class="grow">${e(o.rule.name)}</b><span class="muted small">${st === 'state' ? 'за станом' : mainText(o)}</span></a>`).join('')}</div></details>`;
+      <div class="list">${all.map(({ o, st }) => `<a class="item crow st-${st}" href="#/avto?open=${e(o.rule.id)}"><b class="grow">${e(o.rule.name)}</b><span class="muted small">${st === 'state' ? 'за станом' : mainText(o)}</span></a>`).join('')}</div></details>`;
     return {
       title: 'Головна', noTopKm: true,
       html: head + visitCard + tiresCard + checksHtml + thinHtml + allHtml,
-    };
-  }
-
-  // ---------- Вузол (пункт регламенту) ----------
-  function rule(id) {
-    const r = DB.get(id);
-    if (!r) return notFound();
-    const o = M.status(r);
-    const ws = M.works().filter(w => w.rule === id).reverse();
-    const kv = [
-      ['Що робити', r.action],
-      ['Інтервал', r.group ? 'розділ журналу, без інтервалу' : intervalText(r)],
-      ['Важкі умови', r.heavy],
-      ['Джерело', r.source],
-      ['Довідка J11 1.2 DIG-T', M.spec(r)],
-      ['Примітка', r.note],
-    ].filter(x => x[1]).map(([k, v]) => `<dt>${k}</dt><dd>${e(v)}</dd>`).join('');
-    let st = '';
-    if (!r.group) {
-      st = `<dt>Стан</dt><dd><span class="badge-inline st-${o.st}">${M.ST[o.st]}</span></dd>
-        <dt>Востаннє</dt><dd>${o.lastDate ? U.date(o.lastDate) + (o.lastKm != null ? ' · ' + U.km(o.lastKm, o.lastKmEst) : '') : '—'}</dd>`;
-      if (o.nextKm != null || o.nextDate) st += `<dt>Наступне</dt><dd>${[o.nextKm != null ? U.km(o.nextKm) : '', o.nextDate ? U.date(o.nextDate) : ''].filter(Boolean).join(' або ')}</dd>`;
-      if (remText(o)) st += `<dt>Залишилось</dt><dd>${remText(o)}</dd>`;
-      if (o.snoozed) st += `<dt>Відкладено</dt><dd>до ${U.date(o.snoozed)}</dd>`;
-    }
-    const seasonHint = Nodes.has(r, 'tires') && !M.seasonDates(r.season).length
-      ? `<p class="hint">Можна вказати дати сезонної заміни (наприклад, 01.11, 01.04) і прибрати інтервал у місяцях — тоді програма нагадуватиме саме перед сезоном. Натисніть «Змінити пункт».</p>` : '';
-    const hist = ws.length ? ws.map(w => `
-      <a class="item" href="#/edit/work/${e(w.id)}">
-        <div class="row"><b>${U.date(w.date)}</b><span class="muted">${w.km != null ? U.km(w.km, w.kmEst) : ''}</span><span class="grow"></span><span class="muted">${e(docLabel(w.doc))}</span></div>
-        <div>${e(w.what || '')}</div>
-        ${w.parts || w.note ? `<div class="sub">${e([w.parts, w.note].filter(Boolean).join(' · '))}</div>` : ''}
-      </a>`).join('') : '<p class="muted">Записів ще немає.</p>';
-    return {
-      title: r.name, back: true, html: `
-      <section class="panel ${r.group ? '' : 'st-' + o.st} edge">
-        <h2>${e(r.name)}</h2>
-        <dl class="kv">${st}${kv}</dl>
-        ${seasonHint}
-        <p class="actions"><a class="btn" href="#/edit/visit/new?rule=${e(id)}">Записати виконання</a>
-        ${!r.group && isCheckRule(r) ? `<button type="button" class="btn ghost" data-act="quick-check" data-id="${e(id)}">Перевірено — гаразд</button>` : ''}
-        ${!r.group && o.st !== 'state' && o.st !== 'ok' || o.snoozed ? `<button type="button" class="btn ghost" data-act="snooze" data-id="${e(id)}">${o.snoozed ? 'Відкладено' : 'Нагадати пізніше'}</button>` : ''}
-        <a class="btn ghost" href="#/edit/rule/${e(id)}">Змінити пункт</a></p>
-      </section>
-      <h3 class="sec">Історія (${ws.length})</h3>
-      <div class="list">${hist}</div>`,
     };
   }
 
@@ -505,20 +459,21 @@ const V = (() => {
   }
 
   // ---------- Авто (паспорт і довідники) ----------
-  function avto() {
+  function avto(open) {
     const v = M.context().v || {};
+    const cards = Cards.block(open);
     const link = (h, t, s) => `<a class="item" href="${h}"><b>${t}</b>${s ? `<div class="sub">${s}</div>` : ''}</a>`;
     return {
-      title: 'Авто', html: `
+      title: 'Авто', back: !!open, html: `
       <section class="panel"><b>${e(v.name || 'Автомобіль')}</b>
         ${v.vin ? `<div class="sub">VIN <span id="vinTxt">${e(v.vin)}</span></div><p class="actions"><button class="btn small ghost" data-act="copy" data-src="#vinTxt">Копіювати VIN</button> <a class="btn small ghost" href="#/nalashtuvannia">Змінити дані авто</a></p>` : `<p class="actions"><a class="btn small ghost" href="#/nalashtuvannia">Заповнити дані авто</a></p>`}
       </section>
       <div class="list">
-        ${link('#/maistru', 'Список для майстра', 'Що зробити і перевірити — щоб показати чи надіслати на СТО')}
-        ${link('#/zapchasty', 'Мої запчастини', 'Номери оригіналу й аналогів, що стоїть зараз, пошук у магазинах')}
+        ${link('#/maistru', 'Список для майстра', 'Збирається з карток вузлів, яким час: роботи й номери деталей')}
         ${link('#/shyny', 'Шини', 'Комплекти, що стоїть зараз, сезонні заміни, вік і протектор')}
-        ${link('#/reglament', 'Регламент', 'Пункти обслуговування та інтервали — можна правити')}
-      </div>`,
+      </div>
+      ${cards.html}`,
+      after: cards.after,
     };
   }
 
@@ -534,9 +489,9 @@ const V = (() => {
     const last = o => o.lastDate ? 'востаннє ' + U.date(o.lastDate) + (o.lastKm != null ? ', ' + U.km(o.lastKm, o.lastKmEst) : '') : 'даних немає';
     let unver = false;
     const nums = o => {
-      const ns = M.ruleNums(o.rule);
-      if (ns.some(n => !n.ok)) unver = true;
-      return ns.map(n => '\n    ' + n.name + ': ' + n.num + (n.ok ? '' : ' *')).join('');
+      const m = Cards.master(o.rule);
+      if (m.unver) unver = true;
+      return m.text;
     };
     sect('ПОТРІБНО ЗРОБИТИ (строк минув):', list.filter(o => o.st === 'over'), o => o.rule.name + ' — ' + (o.rule.action || '').toLowerCase() + ' (' + last(o) + ')' + nums(o));
     sect('НЕЗАБАРОМ:', list.filter(o => o.st === 'soon'), o => o.rule.name + ' — ' + (o.rule.action || '').toLowerCase() + ' (' + remText(o) + ')' + nums(o));
@@ -553,7 +508,7 @@ const V = (() => {
         <pre class="pre" id="mText">${e(text)}</pre>
         <p class="actions"><button class="btn" data-act="copy" data-src="#mText">Копіювати</button>
         <button class="btn ghost" data-act="share" data-src="#mText">Надіслати</button></p>
-        <p class="muted small">Список складається сам зі стану вузлів. Нотатки потрапляють сюди, якщо в них позначено «до списку для майстра».</p>
+        <p class="muted small">Список складається сам з карток вузлів, яким час. Нотатки потрапляють сюди, якщо в них позначено «до списку для майстра».</p>
       </section>`,
     };
   }
@@ -590,18 +545,6 @@ const V = (() => {
       </section>
       ${active.length ? `<div class="cards">${active.map(g => item(g, false)).join('')}</div>` : '<section class="panel"><p class="ok">Перевіряти нічого — дані в порядку.</p></section>'}
       ${ok.length ? `<details class="more"><summary>Позначені «гаразд» (${ok.length})</summary><div class="cards">${ok.map(g => item(g, true)).join('')}</div></details>` : ''}`,
-    };
-  }
-
-  function reglament() {
-    const rs = M.rules();
-    const row = r => `<a class="item" href="#/edit/rule/${e(r.id)}"><div class="row"><b class="grow">${e(r.name)}</b></div>
-      <div class="sub">${e(r.action || '')}${r.action ? ' · ' : ''}${r.group ? 'розділ журналу' : intervalText(r)}${r.heavy ? ' · важкі умови: ' + e(r.heavy) : ''}</div></a>`;
-    return {
-      title: 'Регламент', back: true, html: `
-      <p class="actions"><a class="btn" href="#/edit/rule/new">Додати пункт</a></p>
-      <h3 class="sec">Обслуговування</h3><div class="list">${rs.filter(r => !r.group).map(row).join('')}</div>
-      <h3 class="sec">Розділи журналу (ремонти, без інтервалу)</h3><div class="list">${rs.filter(r => r.group).map(row).join('')}</div>`,
     };
   }
 
@@ -681,5 +624,5 @@ const V = (() => {
       <label class="btn small ghost">З галереї<input type="file" accept="image/*" multiple data-ocr hidden></label>`;
   }
 
-  return { stan, rule, hist, zhurnal, docs, doc, vytraty, sche, avto, maistru, perevirka, reglament, notes, probih, obmin, nalashtuvannia, notFound, remText, intervalText, mainText, ocrButtons };
+  return { stan, hist, zhurnal, docs, doc, vytraty, sche, avto, maistru, perevirka, notes, probih, obmin, nalashtuvannia, notFound, remText, intervalText, mainText, ocrButtons };
 })();

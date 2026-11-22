@@ -191,7 +191,7 @@ const F = (() => {
     if (type === 'tireset') return T.setForm(id);
     if (type === 'tireevent') return T.eventForm(id, q);
     if (type === 'trip') return Trip.form(id, q);
-    if (type === 'part') return Parts.form(id);
+    if (type === 'part') return Parts.form(id, q);
     const def = DEFS[type];
     if (!def) return V.notFound();
     const isNew = id === 'new';
@@ -578,7 +578,7 @@ const F = (() => {
     if (type === 'doc' || type === 'fuel' || type === 'expense' || type === 'tireset') await DB.removeFiles(DB.filesOf(id).map(f => f.id));
     await DB.remove(id);
     U.toast('Видалено');
-    return { go: type === 'doc' ? '#/docs' : type === 'rule' ? '#/reglament' : type === 'trip' ? '#/poizdky' : null };
+    return { go: type === 'doc' ? '#/docs' : type === 'rule' ? '#/avto' : type === 'trip' ? '#/poizdky' : null };
   }
 
   return { render, submit, del, onInput, itemEd, itemsTotal, setPending, pick, field, kmOk, docOpts, actions };

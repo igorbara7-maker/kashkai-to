@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.27.0';
+  const VERSION = '0.28.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -15,11 +15,11 @@ const App = (() => {
   }
 
   // Яка вкладка внизу світиться на якому екрані. Шестерня (#/sche, обмін, Excel, налаштування) — частина Головної.
-  const TAB_OF = { '': 'stan', stan: 'stan', rule: 'stan', sche: 'stan', obmin: 'stan', excel: 'stan', perevirka: 'stan', nalashtuvannia: 'stan',
+  const TAB_OF = { '': 'stan', stan: 'stan', rule: 'avto', sche: 'stan', obmin: 'stan', excel: 'stan', perevirka: 'stan', nalashtuvannia: 'stan',
     zhurnal: 'hist', docs: 'hist', doc: 'hist', foto: 'hist', kamera: 'hist', share: 'hist', probih: 'hist', notes: 'hist',
     vytraty: 'vytraty', palne: 'vytraty', dribni: 'vytraty', poizdky: 'vytraty', poizdka: 'vytraty',
     avto: 'avto', zapchasty: 'avto', shyny: 'avto', reglament: 'avto', maistru: 'avto' };
-  const TAB_OF_EDIT = { work: 'hist', visit: 'hist', doc: 'hist', odo: 'hist', note: 'hist', fuel: 'vytraty', expense: 'vytraty', trip: 'vytraty', tireevent: 'avto', rule: 'avto' };
+  const TAB_OF_EDIT = { work: 'hist', visit: 'hist', doc: 'hist', odo: 'hist', note: 'hist', fuel: 'vytraty', expense: 'vytraty', trip: 'vytraty', tireevent: 'avto', rule: 'avto', part: 'avto' };
 
   function route() {
     const { parts, q } = parse();
@@ -28,21 +28,21 @@ const App = (() => {
     try {
       switch (a) {
         case '': case 'stan': r = V.stan(); break;
-        case 'rule': r = V.rule(b); break;
+        case 'rule': r = V.avto(b); break;   // старі посилання на вузол
         case 'zhurnal': r = V.hist(q); break;
         case 'docs': r = V.hist(new URLSearchParams('f=sto')); break;
         case 'doc': r = V.doc(b); break;
         case 'vytraty': r = V.vytraty(); break;
         case 'sche': r = V.sche(); break;
-        case 'avto': r = V.avto(); break;
+        case 'avto': r = V.avto(q.get('open')); break;
         case 'maistru': r = V.maistru(); break;
         case 'perevirka': r = V.perevirka(); break;
-        case 'reglament': r = V.reglament(); break;
+        case 'reglament': r = V.avto(); break;   // раніше окремий «Регламент» — тепер картки вузлів
         case 'notes': r = V.notes(); break;
         case 'probih': r = V.probih(); break;
         case 'palne': r = P.screen(); break;
         case 'shyny': r = T.screen(); break;
-        case 'zapchasty': r = Parts.screen(); break;
+        case 'zapchasty': r = V.avto(); break;   // раніше окремі «Мої запчастини» — тепер деталі в картках вузлів
         case 'poizdky': r = Trip.screen(); break;
         case 'poizdka': r = Trip.tripScreen(b); break;
         case 'dribni': r = Trip.expScreen(); break;
@@ -310,6 +310,7 @@ const App = (() => {
       case 'tg-add': T.addGroup(); break;
       case 'tg-del': el.closest('.tg-ed').remove(); break;
       case 'bolts-ok': await T.boltsOk(el.dataset.id); route(); break;
+      case 'copy-text': copyText(el.dataset.text); break;   // посилання при цьому відкриваються самі
       case 'copy': copyText(document.querySelector(el.dataset.src).textContent); break;
       case 'share': {
         const text = document.querySelector(el.dataset.src).textContent;
@@ -466,6 +467,12 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.28.0': [
+      'Вкладка «Авто» тепер показує картки вузлів: «Регламент» і «Мої запчастини» об’єднано. Торкніться вузла — і все про нього в одному місці: стан, що заливати, деталі з номерами, історія замін і гроші.',
+      'У кожної деталі позначка «перевірено за VIN» або «не перевірено». Кнопка «Знайти номер за VIN» копіює VIN і назву деталі та відкриває каталог оригіналу; «Купити» — магазини за номером.',
+      '«Список для майстра» збирається з карток вузлів, яким час: роботи, що заливати й номери деталей.',
+      'Деталь можна віднести до вузла вручну (у формі деталі — «Вузол»). Ваші записи й запчастини збережено без змін; старі посилання працюють.',
+    ],
     '0.27.0': [
       'Усередині програми: кожен вузол (олива, фільтри, гальма…) тепер має постійну мітку, а запчастини прив’язані до вузла саме за нею, а не за словами в назві. Перейменуєте пункт — зв’язок із запчастинами не зникне.',
       'Ваші записи й запчастини збережено без змін; на екранах нічого не змінилося.',
