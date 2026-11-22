@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.31.1';
+  const VERSION = '0.32.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -298,6 +298,8 @@ const App = (() => {
         break;
       }
       case 'parts-seed': await Parts.seed(); route(); break;
+      case 'nissan-add': await Cards.addNissan(); route(); break;
+      case 'nissan-hide': await Cards.hideNissan(); route(); break;
       case 'gem-run': Ceny.run(); break;
       case 'gem-copy': await Ceny.copyPrompt(); break;
       case 'gem-paste': Ceny.parsePasted($('gemPaste').value); break;
@@ -475,6 +477,10 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.32.0': [
+      'На вкладці «Авто» з’явилася підказка: які вузли з графіка ТО Nissan ще не мають пункту у вашому регламенті (вакуумні шланги підсилювача гальм, педалі й стоянкове гальмо, ремені безпеки, зазори клапанів). Кнопка «Додати» створить їх із правильними назвами й інтервалами, «Не треба» — сховає підказку.',
+      'Ваші наявні пункти й записи не змінено.',
+    ],
     '0.31.1': [
       'У картках вузлів без рідини (ремені безпеки, педалі, ролики, ходова та ін.) блок тепер називається «Довідник», а не «Що заливати».',
     ],

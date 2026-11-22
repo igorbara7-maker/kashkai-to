@@ -122,6 +122,37 @@ const Cards = (() => {
       </div></details>`;
   }
 
+  // Вузли з графіка Nissan, яким у регламенті власника ще немає пункту (і які на цьому пристрої не сховали).
+  const HIDE = 'nissanHidden';
+  function missing() {
+    const have = new Set(M.rules().filter(r => !r.group).flatMap(r => Nodes.ofRule(r)));
+    const hidden = DB.getMeta(HIDE) || [];
+    return J11.RULES.filter(x => !have.has(x.key) && !hidden.includes(x.key));
+  }
+  function missingHtml() {
+    const ms = missing();
+    if (!ms.length) return '';
+    return `<div class="hint" id="nissanMissing"><p>З графіка ТО Nissan є ще ${ms.length} ${U.plural(ms.length, 'вузол', 'вузли', 'вузлів')}, яких немає у вашому регламенті:</p>
+      <ul>${ms.map(x => `<li>${e(x.name)} — ${e(V.intervalText(x) || 'за станом')}</li>`).join('')}</ul>
+      <p class="actions"><button type="button" class="btn small" data-act="nissan-add">Додати</button>
+      <button type="button" class="btn small ghost" data-act="nissan-hide">Не треба</button></p></div>`;
+  }
+  async function addNissan() {
+    const ms = missing();
+    if (!ms.length) return;
+    let order = Math.max(0, ...DB.list('rule').map(r => r.order || 0));
+    await DB.saveAll(ms.map(x => ({
+      id: x.id, t: 'rule', name: x.name, action: x.action, km: x.km, months: x.months,
+      source: x.source, order: ++order, group: false, nodes: [x.key],
+    })));
+    U.toast('Додано пунктів: ' + ms.length);
+  }
+  async function hideNissan() {
+    const hidden = DB.getMeta(HIDE) || [];
+    await DB.setMeta(HIDE, [...new Set([...hidden, ...missing().map(x => x.key)])]);
+    U.toast('Сховано. Пункт завжди можна додати вручну: «Додати пункт»', 3500);
+  }
+
   // Усі картки — для вкладки «Авто». open — id вузла, який треба розгорнути й показати.
   function block(open) {
     const ctx = M.context();
@@ -141,6 +172,7 @@ const Cards = (() => {
       ${Parts.shopList()}
       <div class="toolbar"><input id="vq" type="search" placeholder="Пошук: вузол, деталь, номер, виробник" autocomplete="off"></div>
       <p class="actions"><a class="btn small ghost" href="#/edit/rule/new">Додати пункт</a></p>
+      ${missingHtml()}
       <div class="cards" id="vcards">${list.map(o => card(o.rule, o)).join('')}${orphanHtml}</div>
       ${groups.length ? `<details class="more"><summary>Розділи журналу — ремонти (${groups.length})</summary><div class="cards">${groups.map(r => card(r, null)).join('')}</div></details>` : ''}
       ${Parts.tools(all)}`;
@@ -170,5 +202,5 @@ const Cards = (() => {
     };
   }
 
-  return { block, master, partsOf };
+  return { block, master, partsOf, addNissan, hideNissan };
 })();

@@ -151,5 +151,14 @@ const J11 = (() => {
     'oil-filter': 'За роки ставили три різні номери (15208-00Q1E, 15209-00Q0F, 152095084R) — з’ясуйте за VIN, який правильний.',
     'tie-rod': '43296.01 — без виробника: чий це номер, невідомо.',
   };
-  return { SOURCES, SPEC_SRC, SPECS, FACTS, factsOf, PARTS, SUSPECT };
+  // Пункти регламенту з графіка Nissan ПАР, яких могло не бути в книзі власника. Програма пропонує їх
+  // на вкладці «Авто», лише коли жоден пункт ще не належить цьому вузлу. id постійний — щоб натискання
+  // «Додати» на двох пристроях не дало двох однакових пунктів після синхронізації.
+  const RULES = [
+    { key: 'booster', name: 'Вакуумні шланги підсилювача гальм', action: 'Огляд', km: 30000, months: 24 },
+    { key: 'pedals', name: 'Педалі й стоянкове гальмо', action: 'Огляд', km: 15000, months: 12 },
+    { key: 'seatbelts', name: 'Ремені безпеки', action: 'Огляд', km: 15000, months: 12 },
+    { key: 'valves', name: 'Зазори клапанів', action: 'Перевірка за станом', km: null, months: null },
+  ].map(x => Object.assign({ id: 'nissan-' + x.key, source: 'Графік ТО Nissan (ринок ПАР)' }, x));
+  return { SOURCES, SPEC_SRC, SPECS, FACTS, factsOf, PARTS, SUSPECT, RULES };
 })();
