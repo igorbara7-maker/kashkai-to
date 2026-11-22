@@ -1,6 +1,6 @@
 // Робота без інтернету: усі файли програми зберігаються на пристрої.
 // Після кожної зміни програми збільшуйте номер версії — тоді пристрої отримають оновлення.
-const VERSION = 'kashkai-to-0.25.1';
+const VERSION = 'kashkai-to-0.25.2';
 const FILES = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
   'js/util.js', 'js/db.js', 'js/model.js', 'js/ocrparse.js', 'js/ocr.js', 'js/chek.js', 'js/kamera.js', 'js/zip.js', 'js/folder.js', 'js/obmin.js', 'js/khmara.js', 'js/excel.js', 'js/palne.js', 'js/shyny.js', 'js/poizdky.js', 'js/zapchasty.js', 'js/ceny.js', 'js/views.js', 'js/forms.js', 'js/app.js',

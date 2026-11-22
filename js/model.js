@@ -443,7 +443,19 @@ const M = (() => {
     return { active, ok: group(ps.filter(isOk)).filter(g => !ids.has(g.main.id)) };
   }
 
+  // Довідка виробника (Nissan, Qashqai J11 2015, 1.2 DIG-T HRA2DDT, МКПП) — показується на сторінці вузла.
+  const SPEC_SRC = 'Інструкція Nissan J11 (червень 2015)';
+  const SPECS = [
+    [/олива двигуна|моторн\S* олив/i, 'Об\'єм з фільтром 4,63 л (без фільтра 4,3 л). Nissan 5W-40, ACEA A3/B4.'],
+    [/антифриз|охолоджувальн\S* рідин/i, 'Система з бачком 6,4 л, бачок макс. 0,8 л. Оригінальний антифриз Nissan.'],
+    [/мкпп|кпп|коробк/i, '2,0 л. NISSAN MT-XZ Gear Oil TL/JR або API GL-4 SAE 75W-80.'],
+    [/гальмівн\S* рідин/i, 'DOT 4 (FMVSS 116).'],
+    [/кондиціонер/i, 'Холодоагент HFO-1234yf, мастило ND-12.'],
+  ];
+  const spec = (r) => { const s = SPECS.find(x => x[0].test(r.name || '')); return s ? s[1] : ''; };
+
   return {
+    spec, SPEC_SRC,
     ST, CATS, DOC_KINDS, vehicle, rules, works, odos, docs, fuels, notes, points, current, rate, kmAt,
     context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, cost12, yearKm, totalKm, docRules, ruleCost, ruleNums, used, usedCats,
     issues, checkList,

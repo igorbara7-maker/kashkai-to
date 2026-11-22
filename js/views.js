@@ -165,6 +165,7 @@ const V = (() => {
       ['Інтервал', r.group ? 'розділ журналу, без інтервалу' : intervalText(r)],
       ['Важкі умови', r.heavy],
       ['Джерело', r.source],
+      ['Довідка J11 1.2 DIG-T', M.spec(r)],
       ['Примітка', r.note],
     ].filter(x => x[1]).map(([k, v]) => `<dt>${k}</dt><dd>${e(v)}</dd>`).join('');
     let st = '';
