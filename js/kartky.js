@@ -83,7 +83,8 @@ const Cards = (() => {
     const rows = fs.map(f => f.ok
       ? `<div class="fact"><span class="muted small">${e(f.what)}</span> <b>${e(f.text)}</b><div class="muted small">✓ ${e(f.src)}</div></div>`
       : `<div class="fact"><span class="muted small">${e(f.what)}</span> <span class="tag tag-wait">не перевірено</span><div class="muted small">${e(f.src)}</div></div>`).join('');
-    return `<div class="vsec"><h4>Що заливати</h4>${rows}</div>`;
+    const fluid = fs.some(f => f.what === 'Що заливати');
+    return `<div class="vsec"><h4>${fluid ? 'Що заливати' : 'Довідник'}</h4>${rows}</div>`;
   }
 
   function partsSec(r, ps) {
