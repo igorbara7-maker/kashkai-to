@@ -109,7 +109,9 @@ const Ceny = (() => {
       } catch (x) {
         if (x.status === 429) { notes.push('Ліміт безкоштовних запитів Gemini вичерпано — спробуйте пізніше.'); break; }
         if (x.status === 400 || x.status === 403) { notes.push('Gemini відхилив ключ чи запит (' + x.message.slice(0, 80) + '). Перевірте ключ у Налаштуваннях.'); break; }
-        notes.push(cs[i].p.name + ': помилка зв’язку');
+        const why2 = x.status ? ('Gemini відповів ' + x.status + ': ' + String(x.message).slice(0, 120)) : ('немає зв’язку з Gemini (' + String(x.message).slice(0, 60) + ')');
+        notes.push(cs[i].p.name + ': ' + why2);
+        if (x.status === 404 || x.status === 401) break;
       }
       if (i < cs.length - 1) await wait(GAP);
     }
