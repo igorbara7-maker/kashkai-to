@@ -53,12 +53,29 @@ const Ceny = (() => {
       + 'Відповідь — ТІЛЬКИ JSON-масив без пояснень: [{"num":"номер зі списку","price":число або null,"shop":"сайт","url":"посилання на сторінку товару"}]';
   }
 
-  async function ask(text) {
-    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent', {
+  // Якщо модель знято, беремо найновішу «flash» зі списку моделей ключа.
+  let model = MODEL;
+  async function pickModel() {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key() } });
+    if (!r.ok) throw new Error('список моделей: HTTP ' + r.status);
+    const j = await r.json();
+    const ver = n => { const m = /gemini-(\d+(?:\.\d+)?)/.exec(n); return m ? parseFloat(m[1]) : 0; };
+    const names = (j.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map(m => m.name.replace(/^models\//, ''))
+      .filter(n => /^gemini-[\d.]+-flash(-\d+)?$/.test(n))
+      .sort((a, b) => ver(b) - ver(a));
+    if (!names.length) throw new Error('у ключа немає моделі flash');
+    return names[0];
+  }
+
+  async function ask(text, retry) {
+    let r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key() },
       body: JSON.stringify({ contents: [{ parts: [{ text }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0 } }),
     });
+    if (r.status === 404 && !retry) { model = await pickModel(); return ask(text, true); }
     if (!r.ok) {
       const j = await r.json().catch(() => null);
       const err = new Error((j && j.error && j.error.message) || ('HTTP ' + r.status));
