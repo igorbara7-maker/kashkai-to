@@ -76,6 +76,16 @@ const Cards = (() => {
     return `<div class="vsec"><h4>Гроші</h4>${rows.join('') || '<p class="muted small">Витрат на цей вузол у документах ще немає.</p>'}</div>`;
   }
 
+  // «Що заливати»: рідина, об'єм, інтервал з пакета моделі — кожен рядок з джерелом або позначкою «не перевірено».
+  function factsSec(r) {
+    const fs = M.facts(r);
+    if (!fs.length) return '';
+    const rows = fs.map(f => f.ok
+      ? `<div class="fact"><span class="muted small">${e(f.what)}</span> <b>${e(f.text)}</b><div class="muted small">✓ ${e(f.src)}</div></div>`
+      : `<div class="fact"><span class="muted small">${e(f.what)}</span> <span class="tag tag-wait">не перевірено</span><div class="muted small">${e(f.src)}</div></div>`).join('');
+    return `<div class="vsec"><h4>Що заливати</h4>${rows}</div>`;
+  }
+
   function partsSec(r, ps) {
     const key = Nodes.ofRule(r)[0] || '';
     return `<div class="vsec"><h4>Деталі</h4>${ps.map(Parts.item).join('') || '<p class="muted small">Деталей до цього вузла ще не прив’язано.</p>'}
@@ -103,7 +113,7 @@ const Cards = (() => {
       <summary><span class="grow"><b>${e(r.name)}</b><span class="sub">${o && o.snoozed ? 'Відкладено до ' + U.date(o.snoozed) + ' · ' : ''}${e(sub)}</span></span><span class="badge">${e(badge)}</span></summary>
       <div class="vbody">
         ${o ? stateSec(r, o) : ''}
-        ${spec ? `<div class="vsec"><h4>Що заливати</h4>${e(spec)}<div class="muted small">джерело: ${e(M.SPEC_SRC)}</div></div>` : ''}
+        ${factsSec(r)}
         ${partsSec(r, ps)}
         ${historySec(r)}
         ${moneySec(r)}

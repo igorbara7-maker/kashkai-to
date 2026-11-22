@@ -435,6 +435,9 @@ const M = (() => {
   // Довідка виробника — з пакета моделі (js/model-j11.js), за ключами вузла пункту.
   const spec = (r) => { const ks = Nodes.ofRule(r), s = J11.SPECS.find(x => ks.includes(x[0])); return s ? s[1] : ''; };
 
+  // Факти вузла з пакета моделі (рідина, об'єм, інтервал) — кожен з джерелом і станом «перевірено / не перевірено».
+  const facts = (r) => J11.factsOf(Nodes.ofRule(r));
+
   // Постійні ключі: пунктам регламенту й запчастинам, у яких їх ще немає, одноразово записуємо nodes
   // (за назвою — так само, як зв'язок працював раніше), запчастинам із пакета моделі — ще й pk. Повторний запуск нічого не змінює.
   const normKey = s => (s || '').replace(/[\s.\-]/g, '').toUpperCase();
@@ -452,7 +455,7 @@ const M = (() => {
   }
 
   return {
-    spec, SPEC_SRC: J11.SPEC_SRC, partNodes, ensureNodes, itemKeys,
+    spec, facts, SPEC_SRC: J11.SPEC_SRC, partNodes, ensureNodes, itemKeys,
     ST, CATS, DOC_KINDS, vehicle, rules, works, odos, docs, fuels, notes, points, current, rate, kmAt,
     context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, cost12, yearKm, totalKm, docRules, ruleCost, ruleNums, used, usedCats,
     issues, checkList,
