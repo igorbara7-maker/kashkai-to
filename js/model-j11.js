@@ -33,7 +33,6 @@ const J11 = (() => {
     mkpp: [
       { what: 'Що заливати', text: 'NISSAN MT-XZ Gear Oil TL/JR або API GL-4 SAE 75W-80', src: 'manual' },
       { what: "Об'єм", text: '2,0 л', src: 'manual' },
-      { what: "Об'єм (видання 2017)", text: '1,9 л', src: 'manual17' },
       { what: 'Інтервал (графік Nissan ПАР)', text: 'заміни в графіку немає — лише огляд на протікання кожні 15 000 км або 12 місяців', src: 'za2' },
     ],
     brakefluid: [
