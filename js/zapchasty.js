@@ -96,7 +96,7 @@ const Parts = (() => {
 
   // Пошук за номером на сайтах продавців: лише відкриваємо сайт у новій вкладці, ціни програма не тягне.
   const SHOPS = [
-    ['Intercars', n => 'https://intercars.ua/search/?q=' + encodeURIComponent(n)],
+    ['Intercars', n => 'https://intercars.com.ua/search/?q=' + encodeURIComponent(n)],
     ['Omega', n => 'https://omega.page/search?q=' + encodeURIComponent(n)],
     ['Exist', n => 'https://exist.ua/search/?q=' + encodeURIComponent(n)],
   ];

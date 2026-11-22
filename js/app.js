@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.24.1';
+  const VERSION = '0.24.2';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -464,6 +464,9 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.24.2': [
+      'Посилання на пошук Intercars виправлено (адреса сайту була невірна).',
+    ],
     '0.24.1': [
       'Ключ Gemini: приймаються й нові ключі з крапкою, зайві пробіли та лапки прибираються самі.',
     ],
