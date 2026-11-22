@@ -260,6 +260,11 @@ const M = (() => {
     if (/охолод|радіатор|патрубк|антифриз/.test(n)) k.add('cooling');
     if (/паливн|топливн|evap/.test(n)) k.add('fuel');
     if (/замк|петел|петл/.test(n)) k.add('locks');
+    if (/зазор\S* клапан|клапан\S* зазор/.test(n)) k.add('valves');
+    if (/підсилювач\S* гальм|вакуумн\S* шланг/.test(n)) k.add('booster');
+    if (/педал|стоянков\S* гальм|ручн\S* гальм/.test(n)) k.add('pedals');
+    const safety = /(ремін|ремен)\S* безпек/.test(n);
+    if (safety) k.add('seatbelts');
     if (/акб|акумулятор|аккумулятор/.test(n)) k.add('battery');
     if (/(^|[^а-яіїєґ])шин|шиномонт/.test(n)) k.add('tires');
     if (/кпп|коробк\S* (змін|передач)|трансміс|трансмис/.test(n)) k.add('mkpp');
@@ -282,7 +287,7 @@ const M = (() => {
       if (/колодк/.test(n) && /задн/.test(n)) k.add('padsR');
       if (/щітк\S* склоочис|склоочис|двірник|дворник/.test(n)) k.add('wipers');
       if (/ролик/.test(n)) k.add('rollers');
-      else if (/ремін|ремен/.test(n)) k.add('belt');
+      else if (!safety && /ремін|ремен/.test(n)) k.add('belt');
     }
     return k;
   }
