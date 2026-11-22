@@ -197,7 +197,9 @@ const Parts = (() => {
         <p class="muted small"><b>Без ключа, безкоштовно:</b> 1) скопіюйте запит, 2) вставте його в додаток Gemini на телефоні, 3) скопіюйте відповідь і вставте нижче.</p>
         <p><button class="btn small" data-act="gem-copy">1. Скопіювати запит для Gemini</button></p>
         <textarea id="gemPaste" rows="3" placeholder="3. Сюди вставте відповідь Gemini" style="width:100%"></textarea>
-        <p><button class="btn small" data-act="gem-paste">Розібрати відповідь</button></p></section>
+        <p><button class="btn small" data-act="gem-paste">Розібрати відповідь (ціни)</button></p>
+        <p class="muted small"><b>Номери деталей${empty ? ' (без номера: ' + empty + ')' : ''}:</b> той самий порядок, але запит про номери. Номер від Gemini записується як «не перевірено за VIN».</p>
+        <p><button class="btn small ghost" data-act="gem-copy-num">Запит про номери для Gemini</button> <button class="btn small ghost" data-act="gem-paste-num">Розібрати відповідь (номери)</button></p></section>
       <div id="gemBox"></div></details>`;
   }
 

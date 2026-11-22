@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.32.1';
+  const VERSION = '0.33.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -303,6 +303,9 @@ const App = (() => {
       case 'gem-run': Ceny.run(); break;
       case 'gem-copy': await Ceny.copyPrompt(); break;
       case 'gem-paste': Ceny.parsePasted($('gemPaste').value); break;
+      case 'gem-copy-num': await Ceny.copyNumPrompt(); break;
+      case 'gem-paste-num': Ceny.parseNumbers($('gemPaste').value); break;
+      case 'gem-ok-num': await Ceny.acceptNum(+el.dataset.i); break;
       case 'gem-ok': await Ceny.accept(+el.dataset.i); break;
       case 'gem-no': Ceny.reject(+el.dataset.i); break;
       case 'gem-key-save': if (await Ceny.saveKey($('gemKey').value)) route(); break;
@@ -477,6 +480,13 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.33.0': [
+      'У «Запчастини → Gemini» з’явилися кнопки «Запит про номери для Gemini» і «Розібрати відповідь (номери)». Запит складається з деталей, у яких ще немає номера; відповідь Gemini розбирається в список, і кожен номер ви приймаєте окремо.',
+      'Номер від Gemini записується як «не перевірено за VIN» — звірте його з каталогом.',
+    ],
+    '0.32.2': [
+      'Вузол «Комплект ГРМ» перейменовано на «Ланцюг ГРМ» — у двигуна 1.2 турбо ланцюг, а не ремінь.',
+    ],
     '0.32.1': [
       'Кнопка «Знайти номер за VIN» тепер відкриває каталог Amayama одразу з вашим VIN — вводити його вручну не треба. Назва деталі, як і раніше, копіюється в буфер обміну.',
       'Поруч з’явилася кнопка «PartSouq» — другий каталог оригіналу, теж одразу з вашим VIN.',

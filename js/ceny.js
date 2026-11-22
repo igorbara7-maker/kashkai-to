@@ -161,7 +161,10 @@ const Ceny = (() => {
     if (!box) return;
     if (!state && !found.length && !notes.length) { box.innerHTML = ''; return; }
     box.innerHTML = `<div class="panel"><p class="small">${e(state)}</p>
-      ${found.map((f, i) => `<div class="item"><b>${e(f.name)}</b> <span class="muted small">${e(f.num)}</span><br>
+      ${found.map((f, i) => f.kind === 'num' ? `<div class="item"><b>${e(f.name)}</b><br>
+        ${f.oem ? `Оригінал: <b>${e(f.oem)}</b><br>` : ''}${f.alts.length ? `<span class="small">Аналоги: ${f.alts.map(a => e((a.brand ? a.brand + ' ' : '') + a.num)).join(', ')}</span><br>` : ''}
+        <span class="muted small">${e(f.where || 'джерело не вказано')}${f.note ? ' · ' + e(f.note) : ''}</span>
+        <div class="row" style="gap:6px;margin-top:6px"><button class="btn small" data-act="gem-ok-num" data-i="${i}">Прийняти</button><button class="btn small ghost" data-act="gem-no" data-i="${i}">Відкинути</button></div></div>` : `<div class="item"><b>${e(f.name)}</b> <span class="muted small">${e(f.num)}</span><br>
         <b>${e(Number.isInteger(f.price) ? U.money0(f.price) : U.money(f.price))}</b> <span class="muted small">${e(f.shop || '')}${f.url ? ' · <a href="' + e(f.url) + '" target="_blank" rel="noopener">сторінка</a>' : ' · посилання немає'}</span>
         <div class="row" style="gap:6px;margin-top:6px"><button class="btn small" data-act="gem-ok" data-i="${i}">Прийняти</button><button class="btn small ghost" data-act="gem-no" data-i="${i}">Відкинути</button></div></div>`).join('')}
       ${notes.length ? `<div class="muted small">${notes.map(e).join('<br>')}</div>` : ''}
@@ -209,5 +212,67 @@ const Ceny = (() => {
     draw();
   }
 
-  return { run, copyPrompt, parsePasted, accept, reject, draw, saveKey, settingsPanel, hasKey: () => !!key() };
+  // ---------- номери деталей (ручний спосіб) ----------
+  // Запит складається з деталей без номера; відповідь — JSON з назвою деталі, оригіналом і аналогами.
+  // Номер від ШІ записується як «не перевірено за VIN» — каталог за VIN лишається за власником.
+  const nameKey = s => String(s || '').replace(/[\s.\-]/g, '').toLowerCase();
+  const numOk = s => typeof s === 'string' && s.trim().length >= 5 && s.trim().length <= 40 && /^[0-9A-Za-z][0-9A-Za-z .\-\/]*$/.test(s.trim());
+  const needNums = () => Parts.parts().filter(p => !p.dont && !p.oem);
+
+  async function copyNumPrompt() {
+    const ps = needNums();
+    if (!ps.length) { state = 'У всіх деталей уже є номер.'; notes = []; found = []; draw(); return; }
+    const v = (M.vehicle && M.vehicle()) || {};
+    const text = 'Знайди каталожні номери деталей для Nissan Qashqai J11 (' + (v.year || '2015') + '), двигун 1.2 DIG-T (HRA2DDT, 115 к.с.), механічна коробка, передній привід. '
+      + 'Для кожної деталі дай оригінальний номер Nissan (OEM) і 1–2 номери якісних аналогів (Bosch, Brembo, TRW, ATE, Febi, Sachs, Gates, Ina, Valeo, Varta тощо). '
+      + 'Дивись у відкритих каталогах (partsouq, catcar.info, exist.ua, autodoc, 7zap).\n\nДеталі:\n' + ps.map((p, i) => (i + 1) + '. ' + p.name).join('\n') + '\n\n'
+      + 'Правила: не вигадуй номерів — не знайшов упевнено, став oem: null. Якщо варіантів кілька (залежить від розміру дисків чи комплектації) — вибери найімовірніший і поясни в note. '
+      + 'Відповідь — ТІЛЬКИ JSON-масив, без тексту до і після, по одному об’єкту на деталь, поле name — точно як у списку: '
+      + '[{"name":"назва зі списку","oem":"номер або null","alts":[{"brand":"виробник","num":"номер"}],"where":"сайт, де бачив","note":"коротко, якщо є зауваження"}]';
+    try { await navigator.clipboard.writeText(text); U.toast('Запит про номери скопійовано (' + ps.length + ') — вставте його в Gemini'); }
+    catch (x) { U.toast('Не вдалося скопіювати'); }
+  }
+
+  function parseNumbers(txt) {
+    notes = []; found = [];
+    const m = /\[[\s\S]*\]/.exec(txt || '');
+    let arr = null;
+    if (m) { try { arr = JSON.parse(m[0]); } catch (x) { arr = null; } }
+    if (!Array.isArray(arr)) { state = 'Відповідь не розібрати. Скопіюйте її повністю, разом із квадратними дужками [ ].'; draw(); return; }
+    const byName = new Map(Parts.parts().map(p => [nameKey(p.name), p]));
+    let skipped = 0;
+    for (const it of arr) {
+      const p = it && byName.get(nameKey(it.name));
+      if (!p) { skipped++; continue; }
+      const oem = numOk(it.oem) ? it.oem.trim() : null;
+      const alts = (Array.isArray(it.alts) ? it.alts : []).filter(a => a && numOk(a.num))
+        .map(a => ({ brand: String(a.brand || '').slice(0, 30).trim() || null, num: a.num.trim() })).slice(0, 3);
+      const note = it.note ? String(it.note).slice(0, 160) : '';
+      if (!oem && !alts.length) { if (note) notes.push(p.name + ': ' + note); else skipped++; continue; }
+      if (p.oem && !alts.length) { skipped++; continue; }
+      found.push({ kind: 'num', pid: p.id, name: p.name, oem, alts, where: String(it.where || '').slice(0, 60) || null, note });
+    }
+    if (skipped) notes.push('Пропущено рядків: невідома деталь, немає номера або номер уже є — ' + skipped);
+    state = found.length ? 'Знайдено номерів для деталей: ' + found.length + '. Номери не перевірені за VIN — звірте з каталогом і прийміть потрібні.' : 'Жодного номера не розібрано.';
+    draw();
+  }
+
+  async function acceptNum(i) {
+    const f = found[i];
+    if (!f) return;
+    const raw = DB.get(f.pid);
+    if (!raw) { U.toast('Запчастину вже видалено'); return; }
+    const rec = Object.assign({}, Parts.norm(raw));
+    if (f.oem && !rec.oem) { rec.oem = f.oem; rec.chk = null; }
+    const have = new Set([rec.oem, ...rec.alts.map(a => a.num)].filter(Boolean).map(norm));
+    rec.alts = rec.alts.concat(f.alts.filter(a => !have.has(norm(a.num))).map(a => ({
+      brand: a.brand, num: a.num, st: null, price: null, date: null, shop: null, note: 'від Gemini' + (f.where ? ', ' + f.where : '') + ', не перевірено',
+    })));
+    await DB.save(rec);
+    found.splice(i, 1);
+    U.toast('Номер записано (не перевірено за VIN)');
+    App.refresh();
+  }
+
+  return { run, copyPrompt, parsePasted, copyNumPrompt, parseNumbers, accept, acceptNum, reject, draw, saveKey, settingsPanel, hasKey: () => !!key() };
 })();
