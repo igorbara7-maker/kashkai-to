@@ -168,5 +168,42 @@ const Ceny = (() => {
       <p class="muted small">Ціни знайшов ШІ в інтернеті і міг помилитись: звіряйте зі сторінкою. Нічого не записується, поки не натиснете «Прийняти».</p></div>`;
   }
 
-  return { run, accept, reject, draw, saveKey, settingsPanel, hasKey: () => !!key() };
+  // Ручний спосіб: запит одним текстом для додатка Gemini на телефоні, відповідь вставляється назад.
+  async function copyPrompt() {
+    const cs = candidates().slice(0, 10);
+    if (!cs.length) { state = 'Усі ціни свіжі (до 3 місяців) або в деталей немає номерів.'; notes = []; draw(); return; }
+    const list = cs.map(c => '• ' + c.p.name + ' (Nissan Qashqai):\n' + c.nums.map(n => '   - ' + n.num).join('\n')).join('\n');
+    const text = 'Знайди ПОТОЧНУ роздрібну ціну у гривнях в українських інтернет-магазинах автозапчастин (intercars.com.ua, exist.ua, avtopro.ua, autodoc тощо) на ці деталі за вказаними номерами:\n' + list + '\n\n'
+      + 'Правила: ціну бери ЛИШЕ зі сторінки товару, знайденої саме за цим номером (не аналог, не комплект). Не знайшов — price: null. Нічого не вигадуй. '
+      + 'Відповідь — ТІЛЬКИ JSON-масив без пояснень: [{"num":"номер зі списку","price":число або null,"shop":"сайт","url":"посилання на сторінку товару"}]';
+    try { await navigator.clipboard.writeText(text); U.toast('Запит скопійовано — вставте його в додаток Gemini'); }
+    catch (x) { U.toast('Не вдалося скопіювати'); }
+  }
+
+  function parsePasted(txt) {
+    notes = []; found = [];
+    const m = /\[[\s\S]*\]/.exec(txt || '');
+    let arr = null;
+    if (m) { try { arr = JSON.parse(m[0]); } catch (x) { arr = null; } }
+    if (!Array.isArray(arr)) { state = 'Відповідь не розібрати. Скопіюйте її повністю, разом із квадратними дужками [ ].'; draw(); return; }
+    const want = new Map();
+    for (const p of Parts.parts()) {
+      if (p.dont) continue;
+      if (p.oem) want.set(norm(p.oem), p);
+      for (const a of p.alts) if (a.num && a.st !== 'dont') want.set(norm(a.num), p);
+    }
+    let skipped = 0;
+    for (const it of arr) {
+      const p = it && want.get(norm(it.num));
+      const price = typeof it.price === 'number' ? it.price : parseFloat(String(it.price == null ? '' : it.price).replace(/\s/g, '').replace(',', '.'));
+      if (!p || !(price >= 5 && price <= 300000)) { skipped++; continue; }
+      const url = typeof it.url === 'string' && /^https?:\/\//i.test(it.url) ? it.url : null;
+      found.push({ pid: p.id, name: p.name, num: String(it.num), price: Math.round(price * 100) / 100, shop: String(it.shop || '').slice(0, 40) || null, url });
+    }
+    if (skipped) notes.push('Пропущено рядків без ціни або з невідомим номером: ' + skipped);
+    state = found.length ? 'Знайдено цін: ' + found.length + '. Перевірте за посиланням і прийміть потрібні.' : 'Жодної ціни не розібрано.';
+    draw();
+  }
+
+  return { run, copyPrompt, parsePasted, accept, reject, draw, saveKey, settingsPanel, hasKey: () => !!key() };
 })();

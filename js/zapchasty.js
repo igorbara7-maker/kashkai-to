@@ -180,7 +180,11 @@ const Parts = (() => {
       title: 'Мої запчастини', back: true, html: `
       <section class="panel"><div class="row"><div class="grow"><b>${ps.length}</b> <span class="muted small">пунктів${counts ? ' · ' + counts : ''}</span></div>${add}</div>
         <p class="muted small">Номери з актів СТО — це те, що ставили, а не каталог: СТО могло поставити інше, а програма — помилитися, читаючи акт. Звірте номер за VIN і позначте «перевірено». Ціни — на дату; старші за 3 місяці показані сірим.</p>
-        <p><button class="btn small ghost" data-act="parts-seed">Дозаповнити з актів</button> <button class="btn small ghost" data-act="gem-run">Оновити ціни (ШІ)</button></p></section>
+        <p><button class="btn small ghost" data-act="parts-seed">Дозаповнити з актів</button> <button class="btn small ghost" data-act="gem-run">Оновити ціни (ШІ)</button></p>
+        <p class="muted small"><b>Без ключа, безкоштовно:</b> 1) скопіюйте запит, 2) вставте його в додаток Gemini на телефоні, 3) скопіюйте відповідь і вставте нижче.</p>
+        <p><button class="btn small" data-act="gem-copy">1. Скопіювати запит для Gemini</button></p>
+        <textarea id="gemPaste" rows="3" placeholder="3. Сюди вставте відповідь Gemini" style="width:100%"></textarea>
+        <p><button class="btn small" data-act="gem-paste">Розібрати відповідь</button></p></section>
       <div id="gemBox"></div>
       <input id="pq" type="search" placeholder="Пошук: назва, номер, виробник" autocomplete="off" style="width:100%;margin:8px 0">
       <div id="pbody">${body}</div>`,

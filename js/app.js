@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.24.4';
+  const VERSION = '0.25.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -299,6 +299,8 @@ const App = (() => {
       }
       case 'parts-seed': await Parts.seed(); route(); break;
       case 'gem-run': Ceny.run(); break;
+      case 'gem-copy': await Ceny.copyPrompt(); break;
+      case 'gem-paste': Ceny.parsePasted($('gemPaste').value); break;
       case 'gem-ok': await Ceny.accept(+el.dataset.i); break;
       case 'gem-no': Ceny.reject(+el.dataset.i); break;
       case 'gem-key-save': if (await Ceny.saveKey($('gemKey').value)) route(); break;
@@ -464,6 +466,9 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.25.0': [
+      'Мої запчастини: ціни без ключа — скопіюйте запит, вставте в додаток Gemini на телефоні, а відповідь вставте назад у програму.',
+    ],
     '0.24.4': [
       'Оновлення цін: якщо Google зняв стару модель Gemini, програма сама бере найновішу.',
       'Оновлення цін: замість «помилка зв’язку» тепер видно справжню причину.',
