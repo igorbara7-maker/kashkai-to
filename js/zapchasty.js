@@ -94,9 +94,13 @@ const Parts = (() => {
   }
   const ST = { ok: 'ставив — добре', dont: 'не брати' };
 
-  // Каталог оригіналу: Amayama — безкоштовні каталоги Nissan з пошуком за VIN. Сам VIN програма туди не передає:
-  // вона копіює його (з назвою деталі) у буфер обміну, а ви вставляєте у поле пошуку каталогу.
+  // Каталог оригіналу: Amayama — безкоштовні каталоги Nissan з пошуком за VIN. Якщо VIN заповнено (17 знаків),
+  // адреса відкриває пошук одразу з ним (власник погодив); інакше — загальна сторінка каталогу.
+  // Назва деталі (і VIN) усе одно копіюється в буфер обміну.
   const CATALOG = 'https://www.amayama.com/en/genuine-catalogs/nissan';
+  const catalogUrl = () => { const v = String((M.vehicle() || {}).vin || '').replace(/\s/g, '').toUpperCase(); return /^[A-HJ-NPR-Z0-9]{17}$/.test(v) ? 'https://www.amayama.com/en/genuine-catalogs/epc/nissan-japan/search_frame?frame_no=' + v : CATALOG; };
+  const vinClean = () => String((M.vehicle() || {}).vin || '').replace(/\s/g, '').toUpperCase();
+  const catalogUrl2 = () => /^[A-HJ-NPR-Z0-9]{17}$/.test(vinClean()) ? 'https://partsouq.com/en/search/all?q=' + vinClean() : 'https://partsouq.com/';
   const vinText = p => { const v = M.vehicle(); return [v.vin ? 'VIN ' + v.vin : '', 'Nissan Qashqai J11 1.2 DIG-T', 'Деталь: ' + nameOf(p)].filter(Boolean).join('\n'); };
   const searchText = p => [p.name, p.oem, p.now, p.note, p.with, ...p.alts.flatMap(a => [a.brand, a.num, a.note])].filter(Boolean).join(' ').toLowerCase();
 
@@ -106,7 +110,7 @@ const Parts = (() => {
     const sn = n || ((p.alts.find(a => a.num) || {}).num || '');   // номер для пошуку в магазинах
     const mm = mismatch(p);
     const warn = p.chk !== 'ok' && J11.SUSPECT[pkOf(p)];
-    const find = p.chk === 'ok' ? '' : `<a class="btn small" href="${CATALOG}" target="_blank" rel="noopener" data-act="copy-text" data-text="${e(vinText(p))}">Знайти номер за VIN</a>`;
+    const find = p.chk === 'ok' ? '' : `<a class="btn small" href="${e(catalogUrl())}" target="_blank" rel="noopener" data-act="copy-text" data-text="${e(vinText(p))}">Знайти номер за VIN</a> <a class="btn small ghost" href="${e(catalogUrl2())}" target="_blank" rel="noopener" data-act="copy-text" data-text="${e(vinText(p))}">PartSouq</a>`;
     const buy = sn ? `<details class="buy"><summary class="btn small ghost">Купити</summary>
       <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${SHOPS.map(([nm, f]) =>
         `<a class="btn small ghost" href="${e(f(sn))}" target="_blank" rel="noopener">${nm}</a>`).join('')}
