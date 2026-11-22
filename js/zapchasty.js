@@ -64,9 +64,10 @@ const Parts = (() => {
 
   // Пошук за номером на сайтах продавців: лише відкриваємо сайт у новій вкладці, ціни програма не тягне.
   const SHOPS = [
-    ['Intercars', n => 'https://intercars.com.ua/search/?q=' + encodeURIComponent(n)],
+    ['Intercars', n => 'https://intercars.com.ua/uk/poshuk/?q=' + encodeURIComponent(n)],
     ['Google', n => 'https://www.google.com/search?q=' + encodeURIComponent(n + ' купити ціна')],
-    ['Exist', n => 'https://exist.ua/search/?q=' + encodeURIComponent(n)],
+    ['Exist', n => 'https://exist.ua/uk/search/?query=' + encodeURIComponent(n)],
+    ['Amayama', n => 'https://www.amayama.com/en/find?q=' + encodeURIComponent(n)],
   ];
 
   // Номери, що ставили, але яких немає ні в каталожному, ні серед аналогів — показуємо попередження.
@@ -109,7 +110,19 @@ const Parts = (() => {
     const buy = sn ? `<details class="buy"><summary class="btn small ghost">Купити</summary>
       <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${SHOPS.map(([nm, f]) =>
         `<a class="btn small ghost" href="${e(f(sn))}" target="_blank" rel="noopener">${nm}</a>`).join('')}
-        <button class="btn small ghost" type="button" data-act="copy" data-src="#pn_${e(p.id)}">Скопіювати номер</button></div></details>` : '';
+        <button class="btn small ghost" type="button" data-act="copy" data-src="#pn_${e(p.id)}">Скопіювати номер</button>
+        <button class="btn small ghost" type="button" data-act="gem-copy">Запит про ціни для Gemini</button></div>
+      <div class="buyrec" data-id="${e(p.id)}" data-num="${e(sn)}"><div class="small muted">Купили? Запишіть, щоб наступного разу бачити, скільки коштувало.</div>
+        <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px"><input class="pb-price" inputmode="decimal" placeholder="Ціна, грн" autocomplete="off" style="width:7.5em">
+          <input class="pb-shop" placeholder="Магазин" autocomplete="off" list="shopList" style="width:9em">
+          <button class="btn small" type="button" data-act="part-buy-save">Записати покупку</button></div></div></details>` : '';
+    const paste = p.chk === 'ok' ? '' : `<details class="buy"><summary class="btn small ghost">Вставити знайдений номер</summary>
+      <div class="buyrec" data-id="${e(p.id)}"><div class="small muted">Знайшли номер на малюнку каталогу — вставте його сюди.</div>
+        <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px"><input class="pn-num" placeholder="Номер з каталогу" autocomplete="off" style="width:11em">
+          <input class="pn-where" placeholder="Де знайшли" value="Amayama" autocomplete="off" style="width:8em">
+          <button class="btn small" type="button" data-act="part-num-save">Перевірено за VIN</button></div></div></details>`;
+    const lb = p.buys && p.buys[0];
+    const bought = lb ? `<div class="small">Куплено: <b>${e(grn(lb.price))}</b> <span class="muted">${e([lb.shop, U.date(lb.date), lb.num].filter(Boolean).join(' · '))}</span>${p.buys.length > 1 ? ` <span class="muted">(усього покупок: ${p.buys.length})</span>` : ''}</div>` : '';
     const alts = p.alts.filter(a => a.num || a.brand).map(a => `<li class="${a.st === 'dont' ? 'muted' : ''}">
       ${e([a.brand, a.num].filter(Boolean).join(' '))}${a.st ? ` <span class="small ${a.st === 'dont' ? 'err' : 'ok'}">${ST[a.st]}</span>` : ''}
       ${a.price != null ? '<br>' + priceText(a.price, a.date, a.shop) : ''}${a.note ? ` <span class="muted small">(${e(a.note)})</span>` : ''}</li>`).join('');
@@ -117,6 +130,7 @@ const Parts = (() => {
       <div class="row"><b class="grow">${e(nameOf(p))}${p.qty ? ` <span class="muted small">· ${e(p.qty)}</span>` : ''}</b><a class="btn small ghost" href="#/edit/part/${e(p.id)}">Змінити</a></div>
       ${n ? `<div>За каталогом: <b${p.chk === 'bad' ? ' class="err"' : ''}>${e(n)}</b> ${chkTag(p)}</div>`
         : '<div class="muted small">Номера за каталогом ще немає — знайдіть за VIN і впишіть («Змінити»)</div>'}
+      ${bought}
       ${n && p.oemPrice != null ? `<div class="small">Оригінал: ${priceText(p.oemPrice, p.oemDate, p.oemShop)}</div>` : ''}
       ${alts ? `<div class="small">Аналоги:</div><ul class="alts small">${alts}</ul>` : ''}
       ${p.with ? `<div class="small">Купити разом: ${e(p.with).replace(/\n/g, '; ')}</div>` : ''}
@@ -127,8 +141,41 @@ const Parts = (() => {
       ${p.note ? `<div class="small muted">${e(p.note)}</div>` : ''}
       ${p.src ? `<div class="small muted">Звідки: ${e(p.src)}</div>` : ''}
       <span hidden id="pn_${e(p.id)}">${e(sn)}</span>
-      <div class="btns">${find}${buy}</div></div>`;
+      <div class="btns">${find}${paste}${buy}</div></div>`;
   }
+
+  // Ви знайшли номер у каталозі й вставили його: записуємо як оригінал, ставимо «перевірено за VIN» із датою.
+  // Попередній номер не губимо — він іде в аналоги з приміткою.
+  async function saveNum(box) {
+    const num = box.querySelector('.pn-num').value.trim().replace(/\s+/g, ' ').toUpperCase();
+    if (num.length < 5 || !/^[0-9A-Z][0-9A-Z .\-]*$/.test(num)) { U.toast('Номер виглядає неправильно: лише цифри, літери й дефіс'); return false; }
+    const base = DB.get(box.dataset.id);
+    if (!base) { U.toast('Запис уже видалено'); return false; }
+    const rec = norm(base), old = (rec.oem || '').trim();
+    if (old && key(old) !== key(num) && !rec.alts.some(a => key(a.num || '') === key(old)))
+      rec.alts.push({ brand: null, num: old, st: null, price: null, date: null, shop: null, note: 'номер раніше в картці, не збігся з каталогом за VIN' });
+    rec.alts = rec.alts.filter(a => key(a.num || '') !== key(num) || a.price != null);
+    rec.oem = num; rec.chk = 'ok'; rec.chkDate = U.today(); rec.chkWhere = box.querySelector('.pn-where').value.trim() || null;
+    await DB.save(rec);
+    U.toast('Номер записано: перевірено за VIN');
+    return true;
+  }
+  // Купили: ціна й магазин у деталь. Якщо купили оригінал чи відомий аналог — оновлюємо й його ціну на дату.
+  async function saveBuy(box) {
+    const price = U.num(box.querySelector('.pb-price').value);
+    if (price == null || price <= 0) { U.toast('Вкажіть ціну в гривнях'); return false; }
+    const base = DB.get(box.dataset.id);
+    if (!base) { U.toast('Запис уже видалено'); return false; }
+    const rec = norm(base), shop = box.querySelector('.pb-shop').value.trim() || null, num = box.dataset.num || null, today = U.today();
+    rec.buys = [{ date: today, price, shop, num }, ...(Array.isArray(rec.buys) ? rec.buys : [])];
+    if (num && key(num) === key(rec.oem || '')) { rec.oemPrice = price; rec.oemDate = today; rec.oemShop = shop; }
+    else { const a = rec.alts.find(x => num && key(x.num || '') === key(num)); if (a) { a.price = price; a.date = today; a.shop = shop; } }
+    await DB.save(rec);
+    U.toast('Покупку записано');
+    return true;
+  }
+  const uniqShops = arr => [...new Set(arr.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'uk'));
+  const shopList = () => `<datalist id="shopList">${uniqShops(SHOPS.map(s => s[0]).concat(parts().flatMap(x => [x.oemShop, ...(x.buys || []).map(b => b.shop), ...x.alts.map(a => a.shop)]))).map(x => `<option value="${e(x)}">`).join('')}</datalist>`;
 
   // Службові дії зі списком запчастин (під картками вузлів): заповнити, ціни через Gemini, додати свою.
   function tools(ps) {
@@ -268,5 +315,5 @@ const Parts = (() => {
     return true;
   }
 
-  return { item, tools, searchText, seed, form, submit, onInput, addAlt, CATS, parts, norm };
+  return { item, tools, saveNum, saveBuy, shopList, searchText, seed, form, submit, onInput, addAlt, CATS, parts, norm };
 })();

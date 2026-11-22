@@ -1,7 +1,7 @@
 'use strict';
 // Запуск, переходи між екранами, обробка натискань.
 const App = (() => {
-  const VERSION = '0.29.0';
+  const VERSION = '0.30.0';
   const $ = id => document.getElementById(id);
   let navCount = 0, busy = false;
   const scrollPos = new Map();
@@ -305,6 +305,14 @@ const App = (() => {
       case 'gem-no': Ceny.reject(+el.dataset.i); break;
       case 'gem-key-save': if (await Ceny.saveKey($('gemKey').value)) route(); break;
       case 'gem-key-del': await Ceny.saveKey(''); route(); break;
+      case 'part-num-save': case 'part-buy-save': {
+        const box = el.closest('.buyrec'), card = el.closest('.vcard');
+        if (!await (act === 'part-num-save' ? Parts.saveNum(box) : Parts.saveBuy(box))) break;
+        route();
+        const c = card && $(card.id);
+        if (c) { c.open = true; c.scrollIntoView({ block: 'start' }); }
+        break;
+      }
       case 'pa-add': Parts.addAlt(); break;
       case 'pa-del': el.closest('.pa-ed').remove(); break;
       case 'tg-add': T.addGroup(); break;
@@ -467,6 +475,11 @@ const App = (() => {
 
   // «Що нового» — показуємо один раз після оновлення.
   const NEWS = {
+    '0.30.0': [
+      'Замкнене коло «Знайти номер і купити» у картці вузла. Деталь без перевіреного номера: «Знайти номер за VIN» копіює VIN і назву та відкриває каталог. Знайшли номер на малюнку — «Вставити знайдений номер»: він запишеться з позначкою «перевірено за VIN» і датою.',
+      '«Купити» веде за номером в Exist, Intercars, Amayama і Google (адреси пошуку Exist і Intercars виправлено — раніше вони не знаходили деталь). Є й запит про ціни для Gemini.',
+      'Купили — внизу «Записати покупку»: ціна й магазин збережуться в деталі, і наступного разу видно, скільки коштувало. Номер, що не збігся з каталогом, лишається серед аналогів. Ваші дані не змінено.',
+    ],
     '0.29.0': [
       'Дані про ваш Qashqai J11 1.2 DIG-T зібрано в окремий довідник усередині програми. У картці вузла «Що заливати» тепер показує, що й скільки заливати (олива, антифриз, олива коробки, гальмівна рідина, кондиціонер).',
       'Біля кожного значення написано, звідки воно: «Інструкція Nissan J11», «залито власником» тощо. Чого в джерелах немає (наприклад, інтервали з розділу 8 інструкції), там стоїть «не перевірено» — програма нічого не вигадує.',

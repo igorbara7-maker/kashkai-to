@@ -137,6 +137,7 @@ const Cards = (() => {
         <p class="muted small">Щоб віднести деталь до вузла, натисніть «Змінити» й виберіть вузол у розділі «Вузол».</p></div></div></details>` : '';
     const cnt = k => list.filter(o => k.includes(o.st)).length;
     const html = `<h3 class="sec">Вузли (${list.length}) <span class="cnt c-over">${cnt(['over'])}</span> <span class="cnt c-soon">${cnt(['soon', 'nodata'])}</span> <span class="cnt c-ok">${cnt(['ok', 'state'])}</span></h3>
+      ${Parts.shopList()}
       <div class="toolbar"><input id="vq" type="search" placeholder="Пошук: вузол, деталь, номер, виробник" autocomplete="off"></div>
       <p class="actions"><a class="btn small ghost" href="#/edit/rule/new">Додати пункт</a></p>
       <div class="cards" id="vcards">${list.map(o => card(o.rule, o)).join('')}${orphanHtml}</div>
