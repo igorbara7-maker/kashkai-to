@@ -538,6 +538,8 @@ const F = (() => {
     else base = id ? DB.get(id) : { t: def.t };
     if (!base) { U.toast('Запис уже видалено'); return false; }
     const rec = Object.assign({}, base, vals);
+    // Пункт регламенту: ключі вузла ставимо, коли їх ще немає або змінили «розділ журналу»; перейменування їх не чіпає.
+    if (type === 'rule' && (!Array.isArray(rec.nodes) || !!rec.group !== !!base.group)) rec.nodes = Nodes.guess(rec.name, rec.group);
     if (def.check && !def.check(rec)) return false;
     const saved = await DB.save(rec);
     if ((type === 'fuel' || type === 'expense') && picked.length) {

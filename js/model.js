@@ -247,23 +247,8 @@ const M = (() => {
   }
 
   // ---- документ → журнал: які вузли зачіпає документ ----
-  // Ключ → як упізнати вузол у регламенті за назвою (вузли власник може перейменувати — тоді просто не відмітиться).
-  const NODE_RE = {
-    oil: /олива двигуна|моторн\S* олив/i, air: /повітрян\S* фільтр|фільтр повітр/i, cabin: /фільтр салону|салонн\S* фільтр/i,
-    plugs: /свічк/i, brakefluid: /гальмівн\S* рідин/i, coolant: /антифриз|охолоджувальн\S* рідин/i,
-    belt: /ремінь|ремені/i, rollers: /ролик/i, chain: /ланцюг/i, mkpp: /мкпп|кпп|коробк/i,
-    brakes: /^гальма/i, chassis: /^ходова/i, align: /розвал|сходжен/i, cooling: /система охолодж/i,
-    fuel: /паливн/i, locks: /замки|петлі/i, padsF: /колодки.*передн/i, padsR: /колодки.*задн/i,
-    battery: /акумулятор/i, ac: /кондиціонер/i, wipers: /склоочис|двірник/i, tires: /^шини/i,
-    gEngine: /ремонт:?\s*двигун/i, gChassis: /ремонт:?\s*ходов/i, gElec: /ремонт:?\s*електр/i,
-    gBody: /^кузов/i, gAcc: /аксесуар/i, gWarranty: /гарантійн/i, gDiag: /^діагностик/i,
-  };
-  const BY_CAT = {
-    'Олива двигуна і фільтр': 'oil', 'Свічки запалювання': 'plugs', 'Антифриз': 'coolant', 'Олива МКПП': 'mkpp',
-    'Акумулятор': 'battery', 'Кондиціонер': 'ac', 'Склоочисники': 'wipers', 'Шини і диски': 'tires',
-    'Ремонт двигуна': 'gEngine', 'Електрика': 'gElec', 'Кузов (ДТП)': 'gBody',
-    'Аксесуари, доп. обладнання': 'gAcc', 'Гарантійна кампанія': 'gWarranty',
-  };
+  // Вузли — за постійними ключами з довідника Nodes (js/vuzly.js). Тут лише розпізнавання ПОЗИЦІЙ документів за словами:
+  // позиція → ключі вузлів; пункт регламенту й запчастина прив'язані до ключів, а не до слів у назві.
   function itemKeys(it) {
     const n = (it.name || '').toLowerCase(), cat = it.cat || '';
     const k = new Set();
@@ -282,7 +267,7 @@ const M = (() => {
     if (check) return k;
     // Заміни — за категорією позиції, а без категорії — за назвою.
     const before = k.size;
-    if (BY_CAT[cat]) k.add(BY_CAT[cat]);
+    if (Nodes.byCat[cat]) k.add(Nodes.byCat[cat]);
     else if (cat === 'Фільтри повітря і салону') k.add(/салон|кондиці|кондици/.test(n) ? 'cabin' : 'air');
     else if (cat === 'Ремінь і ролики приводу') k.add(/ролик/.test(n) ? 'rollers' : /ланцюг|грм/.test(n) ? 'chain' : 'belt');
     else if (cat === 'Ходова і рульове' && !k.has('align')) k.add('gChassis');
@@ -322,7 +307,7 @@ const M = (() => {
     const rs = rules(), out = new Set();
     for (const key of keys) {
       const g = key[0] === 'g';   // ключі розділів журналу (ремонти) починаються з «g»
-      const r = rs.find(r => !!r.group === g && NODE_RE[key].test(r.name));
+      const r = rs.find(r => !!r.group === g && Nodes.has(r, key));
       if (r) out.add(r.id);
     }
     return out;
@@ -331,8 +316,11 @@ const M = (() => {
   // Орієнтовна ціна заміни вузла за останнім документом, де вона була (з урахуванням знижки документа).
   // Повертає {sum, src: 'part' | 'doc', year} або null.
   // Спершу — свіжі ціни з «Мої запчастини» (до 90 днів), якщо вони є на ВСІ деталі вузла; інакше — чек.
+  // Ключі вузлів запчастини: збережені; а якщо запис ще без них — за назвою (як було до ключів).
+  const partNodes = p => Array.isArray(p.nodes) ? p.nodes : [...itemKeys({ name: p.name, cat: '' })];
   function ruleParts(rule) {
-    return DB.list('part').filter(p => !p.dont && [...itemKeys({ name: p.name, cat: '' })].some(k => NODE_RE[k] && NODE_RE[k].test(rule.name)));
+    const ks = Nodes.ofRule(rule);
+    return DB.list('part').filter(p => !p.dont && partNodes(p).some(k => ks.includes(k)));
   }
   // Номери деталей вузла для списку майстру: [{name, num, chk}] (оригінал, якщо не «не підходить», інакше перший аналог).
   function ruleNums(rule) {
@@ -368,8 +356,9 @@ const M = (() => {
     if (!d || !d.items || !d.items.length) return null;
     const { coef } = docTotal(d);
     let s = 0;
+    const ks = Nodes.ofRule(rule);
     for (const it of d.items) {
-      if ([...itemKeys(it)].some(k => NODE_RE[k] && NODE_RE[k].test(rule.name))) s += (it.sum || 0) * coef;
+      if ([...itemKeys(it)].some(k => ks.includes(k))) s += (it.sum || 0) * coef;
     }
     return s > 0 ? { sum: Math.round(s / 10) * 10, src: 'doc', year: +String(d.date || '').slice(0, 4) || null } : null;
   }
@@ -443,19 +432,27 @@ const M = (() => {
     return { active, ok: group(ps.filter(isOk)).filter(g => !ids.has(g.main.id)) };
   }
 
-  // Довідка виробника (Nissan, Qashqai J11 2015, 1.2 DIG-T HRA2DDT, МКПП) — показується на сторінці вузла.
-  const SPEC_SRC = 'Інструкція Nissan J11 (червень 2015)';
-  const SPECS = [
-    [/олива двигуна|моторн\S* олив/i, 'Об\'єм з фільтром 4,63 л (без фільтра 4,3 л). Nissan 5W-40, ACEA A3/B4.'],
-    [/антифриз|охолоджувальн\S* рідин/i, 'Система з бачком 6,4 л, бачок макс. 0,8 л. Оригінальний антифриз Nissan.'],
-    [/мкпп|кпп|коробк/i, '2,0 л. NISSAN MT-XZ Gear Oil TL/JR або API GL-4 SAE 75W-80.'],
-    [/гальмівн\S* рідин/i, 'DOT 4 (FMVSS 116).'],
-    [/кондиціонер/i, 'Холодоагент HFO-1234yf, мастило ND-12.'],
-  ];
-  const spec = (r) => { const s = SPECS.find(x => x[0].test(r.name || '')); return s ? s[1] : ''; };
+  // Довідка виробника — з пакета моделі (js/model-j11.js), за ключами вузла пункту.
+  const spec = (r) => { const ks = Nodes.ofRule(r), s = J11.SPECS.find(x => ks.includes(x[0])); return s ? s[1] : ''; };
+
+  // Постійні ключі: пунктам регламенту й запчастинам, у яких їх ще немає, одноразово записуємо nodes
+  // (за назвою — так само, як зв'язок працював раніше), запчастинам із пакета моделі — ще й pk. Повторний запуск нічого не змінює.
+  const normKey = s => (s || '').replace(/[\s.\-]/g, '').toUpperCase();
+  async function ensureNodes() {
+    const recs = [];
+    for (const r of DB.list('rule')) if (!Array.isArray(r.nodes)) recs.push(Object.assign({}, r, { nodes: Nodes.guess(r.name, r.group) }));
+    for (const p of DB.list('part')) {
+      const add = {};
+      if (!Array.isArray(p.nodes)) add.nodes = partNodes(p);
+      if (!p.pk) { const s = J11.PARTS.find(s => normKey(s[1]) === normKey(p.name)); if (s) add.pk = s[7]; }
+      if (Object.keys(add).length) recs.push(Object.assign({}, p, add));
+    }
+    if (recs.length) await DB.saveAll(recs);
+    return recs.length;
+  }
 
   return {
-    spec, SPEC_SRC,
+    spec, SPEC_SRC: J11.SPEC_SRC, partNodes, ensureNodes, itemKeys,
     ST, CATS, DOC_KINDS, vehicle, rules, works, odos, docs, fuels, notes, points, current, rate, kmAt,
     context, status, allStatus, seasonDates, docTotal, nextDocCode, expenses, cost12, yearKm, totalKm, docRules, ruleCost, ruleNums, used, usedCats,
     issues, checkList,

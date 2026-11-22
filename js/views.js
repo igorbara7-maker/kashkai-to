@@ -50,7 +50,7 @@ const V = (() => {
 
   // ---------- Стан ----------
   // Коли є комплекти шин, пункт регламенту про шини заміняє картка «Шини».
-  const isTireRule = o => /шин/i.test(o.rule.name);
+  const isTireRule = o => Nodes.has(o.rule, 'tires');
   function stan() {
     const ctx = M.context();
     const tires = T.status(ctx);
@@ -176,7 +176,7 @@ const V = (() => {
       if (remText(o)) st += `<dt>Залишилось</dt><dd>${remText(o)}</dd>`;
       if (o.snoozed) st += `<dt>Відкладено</dt><dd>до ${U.date(o.snoozed)}</dd>`;
     }
-    const seasonHint = /шин/i.test(r.name) && !M.seasonDates(r.season).length
+    const seasonHint = Nodes.has(r, 'tires') && !M.seasonDates(r.season).length
       ? `<p class="hint">Можна вказати дати сезонної заміни (наприклад, 01.11, 01.04) і прибрати інтервал у місяцях — тоді програма нагадуватиме саме перед сезоном. Натисніть «Змінити пункт».</p>` : '';
     const hist = ws.length ? ws.map(w => `
       <a class="item" href="#/edit/work/${e(w.id)}">
