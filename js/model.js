@@ -453,6 +453,8 @@ const M = (() => {
       const add = {};
       if (!Array.isArray(p.nodes)) add.nodes = partNodes(p);
       if (!p.pk) { const s = J11.PARTS.find(s => normKey(s[1]) === normKey(p.name)); if (s) add.pk = s[7]; }
+      const fix = J11.fixFor(Object.assign({}, p, add));   // виправлення з пакета моделі (лише незмінений власником запис)
+      if (fix) Object.assign(add, fix);
       if (Object.keys(add).length) recs.push(Object.assign({}, p, add));
     }
     if (recs.length) await DB.saveAll(recs);

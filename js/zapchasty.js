@@ -53,10 +53,13 @@ const Parts = (() => {
     for (const p of DB.list('part')) if (p.pk) have.add('pk:' + p.pk);
     // Раніше диски були одним рядком «передні / задні» — якщо він є, окремі рядки не додаємо.
     if (have.has(key('Диски гальмівні передні / задні'))) { have.add(key('Диски гальмівні передні')); have.add(key('Диски гальмівні задні')); }
-    const recs = SEED.filter(s => !have.has(key(s[1])) && !have.has('pk:' + s[7])).map(s => norm({
-      t: 'part', cat: CATS[s[0]], name: s[1], oem: s[2] || null, alts: s[3] || null, now: s[4] || null, src: s[5] || null, qty: s[6] || null, chk: null,
-      pk: s[7], nodes: s[8].slice(),
-    }));
+    const recs = SEED.filter(s => !have.has(key(s[1])) && !have.has('pk:' + s[7])).map(s => {
+      const r = norm({
+        t: 'part', cat: CATS[s[0]], name: s[1], oem: s[2] || null, alts: s[3] || null, now: s[4] || null, src: s[5] || null, qty: s[6] || null, chk: null,
+        pk: s[7], nodes: s[8].slice(),
+      });
+      return Object.assign(r, J11.fixFor(r) || {});   // перевірене за VIN з пакета моделі (паливний фільтр)
+    });
     if (!recs.length) { U.toast('Усе вже є в списку'); return; }
     await DB.saveAll(recs);
     U.toast('Додано пунктів: ' + recs.length);
