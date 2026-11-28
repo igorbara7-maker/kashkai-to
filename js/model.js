@@ -382,29 +382,79 @@ const M = (() => {
 
   // ---------- що варто перевірити в даних ----------
   // Причини (код): пробіг лише оцінка (est), позначки «уточніть / не видно / не вказано» (txt),
-  // показ пробігу менший, ніж у попередній день (ord), документ без записів у журналі (jr).
+  // показ пробігу менший, ніж у попередній день (ord), неймовірний стрибок пробігу (jump), дата в
+  // майбутньому (future), літрів більше, ніж уміщує бак (fuel), сумнівний DOT шин (dot), документ без записів
+  // у журналі (jr).
   // «Гаразд» запам'ятовує коди в записі (ok) — пункт повернеться лише з новою причиною.
   // Записи журналу, прив'язані до документа, ідуть одним пунктом із ним.
-  const DOUBT_RE = /уточн|не\s+видн|не\s+вказ|непевн|пробіг[^.;\n]{0,15}оцінк|взято\s+оцінк/i;
-  const DOUBT_FIELDS = { work: [['note', 'Примітка']], doc: [['about', 'Зміст'], ['seller', 'СТО'], ['number', 'Номер']], odo: [['src', 'Звідки']], fuel: [['note', 'Примітка']], tireevent: [['note', 'Примітка']] };
+  // «не знайдено» — крім звичайного «несправностей / течі не знайдено».
+  const DOUBT_RE = /уточн|не\s+видн|не\s+вказ|непевн|пробіг[^.;\n]{0,15}оцінк|взято\s+оцінк|(?<!(?:несправност|дефект|теч|помил|пошкоджен|проблем|зауважен|люфт)\S{0,4}\s+)не\s+знайд(?!\S*\s+(?:несправност|дефект|теч|помил|пошкоджен|проблем|зауважен|люфт))/i;
+  const DOUBT_FIELDS = { work: [['note', 'Примітка']], doc: [['about', 'Зміст'], ['seller', 'СТО'], ['number', 'Номер']], odo: [['src', 'Звідки']], fuel: [['note', 'Примітка']], tireevent: [['note', 'Примітка']], tireset: [['note', 'Примітка']] };
   const clip = (s, n = 140) => { s = String(s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+
+  // Більше за стільки кілометрів на день (або разом) між показами не буває — це помилка в цифрах.
+  const JUMP_DAY = 3000, JUMP_MAX = 500000;
+  // Покази, що неймовірно більші за всі попередні і водночас не підтверджуються пізнішими.
+  function jumps(sorted) {
+    const out = new Map();
+    let top = null;
+    sorted.forEach((r, i) => {
+      if (top && r.date > top.date) {
+        const diff = r.km - top.km;
+        if (diff > Math.min(JUMP_MAX, JUMP_DAY * U.days(top.date, r.date))
+          && !sorted.slice(i + 1).some(x => x.date > r.date && x.km >= r.km)) { out.set(r, top); return; }
+      }
+      if (!top || r.km > top.km) top = r;
+    });
+    return out;
+  }
+
+  // Шини: однаковий DOT у різних марок (переписано не з тих шин) і DOT, пізніший за покупку.
+  function tireIssues(add) {
+    const all = [];
+    for (const s of DB.list('tireset')) for (const g of s.groups || []) if (g.dot) all.push({ s, g });
+    const brand = x => String(x.g.brand || '').trim().toLowerCase();
+    const label = x => T.nameOf(x.s) + ', ' + T.groupName(x.g);
+    for (const a of all) {
+      const made = T.dotDate(a.g.dot);
+      if (made && a.g.bought && made > U.addDays(a.g.bought, 7))
+        add(a.s, 'dot', label(a) + ': за DOT ' + a.g.dot + ' шини виготовлено пізніше, ніж куплено (' + U.date(a.g.bought) + ')');
+      // Підозрілою вважаємо пізніше куплену групу; якщо дат немає чи вони однакові — обидві.
+      const twin = all.find(b => b.g.dot === a.g.dot && brand(a) && brand(b) && brand(a) !== brand(b)
+        && !(a.g.bought && b.g.bought && a.g.bought < b.g.bought));
+      if (twin) add(a.s, 'dot', label(a) + ': DOT ' + a.g.dot + ' такий самий, як у «' + label(twin) + '», — перевірте на боковині', twin.s);
+    }
+  }
 
   function issues() {
     const out = [];
     const add = (r, code, why, other) => out.push({ r, code, why, other: other || null });
     const os = odos(), ws = works(), ds = docs(), all = [...os, ...ws, ...ds, ...fuels(), ...DB.list('tireevent')];
     for (const r of all) if (r.kmEst && r.km != null) add(r, 'est', 'Пробіг ' + U.km(r.km, true) + ' — лише оцінка');
-    for (const r of all) {
+    for (const r of [...all, ...DB.list('tireset')]) {
       for (const [f, label] of DOUBT_FIELDS[r.t]) if (typeof r[f] === 'string' && DOUBT_RE.test(r[f])) add(r, 'txt', label + ': ' + clip(r[f]));
     }
     for (const n of notes()) if (!n.done && DOUBT_RE.test(n.text || '')) add(n, 'txt', clip(n.text, 200));
+    // Помилка в цифрах: показ із неймовірним стрибком позначаємо сам, а не наступні правильні.
+    const today = U.today();
+    const read = all.filter(x => x.date && x.km != null && !x.kmEst).sort(byDate);
+    const bad = jumps(read.filter(x => x.date <= today));
+    for (const [r, was] of bad) add(r, 'jump', 'Пробіг ' + U.km(r.km) + ' набагато більший, ніж ' + U.km(was.km) + ' на ' + U.date(was.date) + ', — схоже на помилку в цифрах', was);
     // Пробіг не по порядку: показ менший за найбільший показ попереднього дня з показами.
     let prev = null, day = null;
-    for (const r of all.filter(x => x.date && x.km != null && !x.kmEst).sort(byDate)) {
+    for (const r of read.filter(x => !bad.has(x))) {
       if (!day || day.date !== r.date) { prev = day; day = { date: r.date, max: r }; }
       else if (r.km > day.max.km) day.max = r;
       if (prev && r.km < prev.max.km) add(r, 'ord', 'Пробіг ' + U.km(r.km) + ' менший, ніж ' + U.km(prev.max.km) + ' на ' + U.date(prev.date) + ' (раніше)', prev.max);
     }
+    for (const r of [...all, ...DB.list('expense')]) if (r.date > today) add(r, 'future', 'Дата ' + U.date(r.date) + ' ще не настала — перевірте рік і місяць');
+    for (const s of DB.list('tireset')) for (const g of s.groups || []) if (g.bought > today) add(s, 'future', T.groupName(g) + ': дата покупки ' + U.date(g.bought) + ' ще не настала');
+    const tank = vehicle().tank;
+    for (const f of fuels()) {
+      const l = f.litres != null ? f.litres : f.sum && f.price ? f.sum / f.price : 0;
+      if (l > tank + 10) add(f, 'fuel', 'Заправлено ' + String(Math.round(l * 10) / 10).replace('.', ',') + ' л, а бак — ' + U.int(tank) + ' л');
+    }
+    tireIssues(add);
     const inJournal = new Set(ws.map(w => w.doc).filter(Boolean));
     for (const d of ds) {
       if (!inJournal.has(d.id) && !/калькуляц|рахунок/i.test(d.kind || '')) add(d, 'jr', 'Не позначено виконане в журналі — стан вузлів цей документ не враховує');

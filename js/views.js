@@ -522,7 +522,8 @@ const V = (() => {
       const m = g.main;
       const title = m.t === 'doc' ? 'Документ ' + [m.code, m.seller].filter(Boolean).join(' · ')
         : m.t === 'work' ? 'Журнал: ' + ruleName(m.rule) : m.t === 'odo' ? 'Показ пробігу' : m.t === 'fuel' ? 'Заправка'
-          : m.t === 'tireevent' ? 'Шини: ' + (T.KINDS[m.kind] || 'подія').toLowerCase() : 'Нотатка';
+          : m.t === 'tireevent' ? 'Шини: ' + (T.KINDS[m.kind] || 'подія').toLowerCase()
+            : m.t === 'tireset' ? 'Комплект шин: ' + T.nameOf(m) : m.t === 'expense' ? 'Дрібна витрата' : 'Нотатка';
       const ws = g.recs.filter(r => r.t === 'work' && r !== m);
       const ids = e(g.recs.map(r => r.id).join(','));
       const btn = isOk
@@ -534,13 +535,13 @@ const V = (() => {
           ${g.why.map(w => `<div class="sub">• ${e(w)}</div>`).join('')}
           ${ws.length ? `<div class="sub">Стосується записів у журналі: ${ws.length} (${e([...new Set(ws.map(w => ruleName(w.rule)))].slice(0, 4).join(', '))})</div>` : ''}
         </a>
-        <div class="card-acts">${btn}${g.others.map(o => `<a class="btn small ghost" href="${recLink(o)}">Запис від ${U.date(o.date)}</a>`).join('')}</div>
+        <div class="card-acts">${btn}${g.others.map(o => `<a class="btn small ghost" href="${recLink(o)}">${o.t === 'tireset' ? 'Комплект «' + e(T.nameOf(o)) + '»' : 'Запис від ' + U.date(o.date)}</a>`).join('')}</div>
       </div>`;
     };
     return {
       title: 'Перевірити дані', back: true, html: `
       <section class="panel">
-        <p class="small">Тут зібрано, що варто уточнити: пробіг лише оцінений, позначки «уточніть», «не видно», «не вказано», покази пробігу не по порядку дат, документи, не позначені в журналі. Відкрийте пункт і виправте — уточнивши пробіг, зніміть позначку «лише оцінка» і приберіть «уточніть» з примітки.</p>
+        <p class="small">Тут зібрано, що варто уточнити: пробіг лише оцінений, позначки «уточніть», «не видно», «не вказано», «не знайдено», покази пробігу не по порядку дат чи з неймовірним стрибком, дати в майбутньому, заправки, більші за бак, сумнівні DOT шин, документи, не позначені в журналі. Відкрийте пункт і виправте — уточнивши пробіг, зніміть позначку «лише оцінка» і приберіть «уточніть» з примітки.</p>
         <p class="muted small">Якщо все так і є — «Гаразд, так і є»: пункт зникне і повернеться, лише якщо з’явиться нова причина.</p>
       </section>
       ${active.length ? `<div class="cards">${active.map(g => item(g, false)).join('')}</div>` : '<section class="panel"><p class="ok">Перевіряти нічого — дані в порядку.</p></section>'}

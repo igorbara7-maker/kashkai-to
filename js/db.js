@@ -14,6 +14,10 @@ const DB = (() => {
   // що має все наше до цього часу, тож зміна з «відсталим» годинником загубилася б у «лише змінах».
   function clock() { return Math.max(Date.now(), (meta.clock || 0) + 1); }
 
+  // Нова версія запису завжди пізніша за ту, поверх якої її зроблено: інакше на пристрої з «відсталим»
+  // годинником виправлення, зроблене після обміну, програло б старішій версії з іншого пристрою.
+  const after = (now, prev) => Math.max(now, ((prev && prev.u) || 0) + 1);
+
   const p = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   const done = t => new Promise((res, rej) => {
     t.oncomplete = () => res();
@@ -77,7 +81,7 @@ const DB = (() => {
     const s = t.objectStore('records');
     for (const r of recs) {
       if (!r.id) r.id = U.uid();
-      r.u = now; r.dev = device;
+      r.u = after(now, cache.get(r.id)); r.dev = device;
       s.put(r);
     }
     await done(t);
@@ -114,7 +118,7 @@ const DB = (() => {
     for (const id of [].concat(ids)) {
       const m = fcache.get(id);
       if (!m || m.del) continue;
-      const f = { id, doc: m.doc, c: m.c, del: true, u: now, dev: device };
+      const f = { id, doc: m.doc, c: m.c, del: true, u: after(now, m), dev: device };
       t.objectStore('files').put(f);
       out.push(f);
     }
